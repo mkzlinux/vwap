@@ -20,4 +20,23 @@ export type Work = {
   kind: WorkKind;
   featured?: boolean;
   blurb?: string;
+  date?: string;
+};
+
+export type Comment = {
+  id: string;
+  workId: string;
+  name: string;
+  body: string;
+  at: string;
+};
+
+export type QuizQuestion = {
+  id: string;
+  seriesId?: string;
+  workId?: string;
+  prompt: string;
+  choices: string[];
+  answer: number;
+  insight: string;
 };

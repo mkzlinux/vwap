@@ -1,0 +1,123 @@
+import type { Work } from "./types";
+
+export const seriesSlogan: Record<string, string> = {
+  kruptos: "CLASSIFIED LIGHT",
+  trom: "THE PRIEST RETURNS",
+  noah: "AS IN THE DAYS OF NOAH",
+  abraham: "WE ARE TAKING OVER",
+  melchizedek: "ORDER OF THE MOST HIGH",
+  heis: "HE AND WE ARE ONE",
+  unmasking: "THE MASK FALLS",
+  word: "THE WORD IS ALIVE",
+  meditation: "BE STILL AND REMAIN",
+  comics: "ISSUE DROP",
+  qa: "OPEN COURT",
+  others: "THE VAULT SPEAKS",
+};
+
+export const dates: Record<string, string> = {
+  "10swHqoEyakOyTEBDZldDBgfsSfz6eZpg": "2026-03-22",
+  "1x-xO1nbwsnX2tiYfZ4a3MLBrPrp_g210": "2024-07-06",
+  "1xAE1L4bQKphsTXd38Vr-_gAAal4gqbtG": "2024-07-06",
+  "1wtaegN0CmOmxqw1ba_IEGikPEnFOA_To": "2024-07-06",
+  "1xAWtODxIzH76PHhhDISr5KYPpsXn2Gue": "2024-07-06",
+  "1wuK4CuGlYYsXG2RS64OpdQPH4_nHaorl": "2024-07-06",
+  "1wn3z31tzvbLC7idNMq57UH1W7rL_qy8G": "2024-07-06",
+  "15fMnvwO-kBcvpmDEAQBZgK9T5Gh4UpHw": "2024-08-11",
+  "15doLWArGMXtGBz71KoNVFW7rfz4nQ_iU": "2024-08-11",
+  "15V63ltE8AYvwFug9eW_DKyT_KzppSoVV": "2024-08-11",
+  "15TBIwKG8KfMzvemGUTop46jgNaIoPc38": "2024-08-11",
+  "1EiLo9RkriW8IsasYHuQvzjfeWgJe8mYi": "2024-09-07",
+  "1Eq3hyudLSw1MWKeP3s35BllDGSxQPfgo": "2024-09-07",
+  "1ei2_PtiYgO3e62xiGHlZ3ZwgSjOjGf1d": "2023-05-10",
+  "1gWRaPuGpz4MJfaIM-QizVJSBJxMmGSJ-": "2023-05-10",
+  "1i27cxulmG1OQnZrMlfAiPJJbd7pCRj-c": "2023-01-09",
+  "1V69YDwOqLipJUPp9rxbwKAsc2jVkGit_": "2023-02-16",
+  "1-eCYkQ6FAmPv-kaD_HVSvB4fvJ6Qt0o9": "2023-02-16",
+  "1-Z3XauHvGWss0aoZWOvsVhCIMBW4OcIw": "2023-02-16",
+  "1-YcoXTAWP8CTDD-7OnrV0mgHugUZYnxk": "2023-02-16",
+  "1S8XpIyJYTj0bFRafCHSF9cxKAARb1Rop": "2023-02-16",
+  "1ZwhyXNy0zP-shry4cs_Ca4UgVTOSlg9f": "2023-05-10",
+  "1ZxXXDrs6s2mIIhy6qEIt09K3xV28HCAd": "2023-05-10",
+  "1Zy8jDTjPh3F70OtIzPU68rplsbNAempL": "2023-05-10",
+  "1_0PR1pMdNG4ypYhnZKKqBxquaLp47yjn": "2023-05-10",
+  "1_2RABbRmmO2lZVAqHuz5vXNwd8CS3x2F": "2023-05-10",
+  "1_56TPZtCZECIObiN2zj-f03h9D4a4igD": "2023-05-10",
+  "1_8PN9DX_67MeSshttZKD7xRG3zhxO3_1": "2023-05-10",
+  "1_98ghtiRSnqL77lP_hyQEVFMQZxLPQ6K": "2023-05-10",
+  "16YCIeFuCOyZnVGAC8KZIW1UxDClcJ2ll": "2023-06-12",
+  "16euMpCcy99HK1mzWZyaZl71a8Cbr3zbs": "2023-06-12",
+  "16jGZMQIc61qjWctbveRg0hwSp2C5vf4g": "2023-06-12",
+  "1OZZGGeCqn36tRW8DEvMqQUn_GsOQIA30": "2023-07-10",
+  "14_Wx7LPnNIXFOyLuvE-gKRc37VwYddsq": "2023-09-28",
+  "14ZG0eqFrissveJHjHQgdPOSCF3f49Vlp": "2023-09-28",
+  "16e8wVDs4QqMDf6SKSB_WA01IECeBpOKN": "2023-09-30",
+  "15DRQUYTppgUAGPD1AUG6zj0EmlFaZPuI": "2023-09-30",
+  "14dQufv2R-2iN43Htc5s3u9gCzhDeqZrh": "2023-09-30",
+  "14fr7RqsN1ttiANvBqNqL_f9UpZ2NQhjf": "2023-09-30",
+  "16dFcUWT9jTdrdHlbGXHg9Ouhl5-yEaf4": "2023-09-30",
+  "1gjo6LLNmF6yVmRpZG4T3QAsQEJYrLgfW": "2024-08-11",
+  "14rZ4tDluxw9lYc2jBJrkrlugj0t0vVEh": "2024-08-11",
+  "1MNIe-q9qMzXBsDjm9ERdj1b5uMfy_cxz": "2023-10-18",
+  "1MScKVBeBR7cXUsCQh9Z05Hi9E7fsZKVH": "2023-10-18",
+  "1MOBS0L7IDwNUwnDU-uHILTe1ZcPIW98d": "2023-10-18",
+  "1MTq8wVIrgvnTIVUv976Olp0NjAE0uCXs": "2023-10-18",
+  "1MVjMeh2OXUzi36kqLF_gRv5cqzP3EV3k": "2023-10-18",
+  "1Ol63qVnm5UgFr8WHIvITOzaW9uskkU1W": "2023-07-10",
+  "1Os-_zUmZIJxvB31pKMquVr8DaXnSPrPL": "2023-07-10",
+  "1OwV8Fql5d7j1mRefrEGsd-0I0QwB4saI": "2023-07-10",
+  "1-hSi3lrLpKU3tg7FPReZDdbBmih4PwIJ": "2021-12-21",
+  "109JpnvROoooKmcbqdwgdbsHFt4ubHacj": "2021-12-21",
+  "1-n-BLovk-LO91n8uEWxn9MqpwpQXA9S-": "2021-12-21",
+  "10HJUHbIsGBCKuQwrZppbavOx9Ea_rpoM": "2021-12-21",
+  "1-n8MVa1eTFBeNwYHdEGjKUFfuKCr7BCx": "2021-12-21",
+  "10TPxIDOnAy9_7Xi-VHFoTjM6VN69-Hqp": "2021-12-21",
+  "100Byrp9Jl-g0wYCsm-vfgdIs-iRn5sNk": "2021-12-21",
+  "10WWZlwnRIZak5vfLHzPvAyZjsPaCwKOG": "2021-12-21",
+  "1-UA_jaIEcGoDrfAOQXddbyo3KsDvdrVZ": "2021-12-21",
+  "1NiRq31q3VWuGC9o2fXyMt9D6Q0Kajopc": "2021-12-21",
+  "10AdAVheTj5zoKn4pjPyUkrffuV3CzsPe": "2021-12-21",
+  "1NkPdYEq-VPQMHLc1Jo3lqORNVER_4RJx": "2021-12-21",
+  "1016Wj61CbLfdxmNyuIP5c_2LQY90SdXi": "2021-12-21",
+  "1-iuhOJgeYpFZH7ceuZe8DgxT0ZPqY4vp": "2021-12-21",
+  "1-WS7K4y2-i24olu6C2bBAIU3Frdl8J33": "2021-12-21",
+  "11o90zfh2iNxoAiqoi4crJcomV_6QAWS1": "2022-02-17",
+  "115LQsgeg9mhWPSQz3lpRmZrMnZ-q9bzZ": "2022-02-17",
+  "11mSlY-Hc571oZ9mPWnmSSGf_DFMPvnt1": "2022-02-17",
+  "11eCuWOnEo0RMZQgUw2P-DReUMl5W3L7r": "2022-02-17",
+  "11kFv1aGvxe73Yr83k35urEqc0DuMcP6w": "2023-05-10",
+  "11kjipYvAeKNb3cFvNJ6qfkN5AdmTn3_C": "2022-02-17",
+  "11htebWepptm6jzyFXMkxOm3-9Ex8bkC3": "2023-05-10",
+  "11ovWPQw4C4ROgKmPyzUjFKa0EBVdQnsQ": "2022-02-17",
+  "11Yxx7denTdxbH9FbbqOwEO7Lcs_Gscah": "2022-02-17",
+  "11kRUZOdomzq6ULBd9ZucFoaXM71JYWH4": "2022-02-17",
+  "11fG9AqaZWJNwkDQ9vswlEthFy1RqsnmI": "2022-02-17",
+  "1melLxPegtCuhwkSpNA_60waDIlDDRWeN": "2022-03-05",
+  "1mXK6ZprMA-UVZQmxubluys6YtgTpnGy7": "2022-03-05",
+  "1mozG1gXDaTR-Kqa469S4zIjO_8Dpt8AF": "2022-03-05",
+  "1mJaBkrbL_Iyz-cwdFMa2sHzSUAWgDm49": "2022-03-05",
+  "1v_CBT8JjJu8t00FpzKjbksghtT3iLBh_": "2022-04-13",
+  "1vG7gn8MzFnH-crvg8EPq2cXQ6a0TgBeL": "2022-04-13",
+  "1vYZ1Ds4s951ZhBT3JA823q95PPM7a91z": "2022-04-13",
+  "1vIsBiV-0VJwIv1-wDWnCHKG3oK1ikSjm": "2022-04-13",
+  "1vaumgsTYNIXVfQt9rluBg2k19jkkejiB": "2022-04-13",
+  "13mBbjutIfVNr-0USCrUsmbNT8ENc2526": "2022-02-20",
+  "1RTRmu2gMP625kEXSrTV7Oc68YhkziNr1": "2026-02-03",
+  "1pCFNkt3I1DfGhnm6sgbIfxXhmHyTTWDd": "2026-01-13",
+};
+
+export function sloganFor(work: Work): string {
+  if (work.seriesId === "abraham") return "WE ARE TAKING OVER";
+  return seriesSlogan[work.seriesId] ?? "BIBLE SECRETS";
+}
+
+export function dateFor(work: Work): string {
+  return work.date || dates[work.id] || "2021-11-26";
+}
+
+export function posterDate(iso: string): string {
+  const d = new Date(iso + (iso.length === 10 ? "T12:00:00" : ""));
+  const day = String(d.getDate()).padStart(2, "0");
+  const mon = d.toLocaleString("en-GB", { month: "long" }).toUpperCase();
+  return `${day} · ${mon} · ${d.getFullYear()}`;
+}

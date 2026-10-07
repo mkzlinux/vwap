@@ -80,7 +80,7 @@ export const series: Series[] = [
     tagline: "The Inner Course",
     description:
       "The road to meditation and the course of it — a quiet curriculum for those learning to remain.",
-    cover: "/art/word.jpg",
+    cover: "/art/meditation.jpg",
     accent: "#7a8aa0",
   },
   {
