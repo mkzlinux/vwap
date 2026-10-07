@@ -99,7 +99,8 @@ input bool               InpAlertPush      = false;  // Push notification
 input bool               InpAlertEmail     = false;  // Email
 
 input group "Display"
-input int                InpMaxSignals     = 40;     // Max historical boxes to keep on the chart
+input int                InpMaxSignals     = 40;     // Max boxes on the chart
+input int                InpHistoryBars    = 500;    // Bars back to search for boxes
 input bool               InpShowPanel      = true;   // Show the status panel
 input bool               InpDeleteOnRemove = true;   // Delete all objects when the indicator is removed
 
@@ -403,6 +404,55 @@ int SignalAt(const int i,
   }
 
 //+------------------------------------------------------------------+
+//| Signal plus its entry/SL/TP for bar i.                           |
+//| Returns false when bar i carries no usable signal.               |
+//+------------------------------------------------------------------+
+bool SignalBoxAt(const int i,
+                 const double &open[],
+                 const double &high[],
+                 const double &low[],
+                 const double &close[],
+                 int    &dir,
+                 double &entry,
+                 double &sl,
+                 double &tp,
+                 double &atr)
+  {
+   dir=0;
+   if(BufVwap[i]==EMPTY_VALUE || BufVwap[i-1]==EMPTY_VALUE)
+      return(false);
+   if(BufEma[i]==EMPTY_VALUE  || BufEma[i-1]==EMPTY_VALUE)
+      return(false);
+
+   dir=SignalAt(i,BufVwap,BufEma,open,high,low,close);
+   if(dir==0)
+      return(false);
+
+   //--- ATR-based stop distance, measured on the signal bar
+   double a=AtrAt(i,InpAtrPeriod,high,low,close);
+   if(a<=0.0)
+     {
+      dir=0;
+      return(false);
+     }
+
+   atr=a;
+   entry=close[i];
+   double risk=a*InpSlAtrMult;
+   if(dir>0)
+     {
+      sl=entry-risk;
+      tp=entry+risk*InpRewardR;
+     }
+   else
+     {
+      sl=entry+risk;
+      tp=entry-risk*InpRewardR;
+     }
+   return(true);
+  }
+
+//+------------------------------------------------------------------+
 //| Friendly name of the active entry mode                           |
 //+------------------------------------------------------------------+
 string ModeText(void)
@@ -605,52 +655,48 @@ int OnCalculate(const int rates_total,
    int      newest_dir=0;
    double   newest_entry=0.0,newest_sl=0.0,newest_tp=0.0;
 
+   //--- pass 1: arrows over the whole recalculated range, plus the newest
+   //--- signal for the alert. No chart objects are created here.
    for(int i=sig_start;i<=last_closed;i++)
      {
-      if(BufVwap[i]==EMPTY_VALUE || BufVwap[i-1]==EMPTY_VALUE)
+      int    dir=0;
+      double entry=0.0,sl=0.0,tp=0.0,atr=0.0;
+      if(!SignalBoxAt(i,open,high,low,close,dir,entry,sl,tp,atr))
          continue;
-      if(BufEma[i]==EMPTY_VALUE  || BufEma[i-1]==EMPTY_VALUE)
-         continue;
-
-      int dir=SignalAt(i,BufVwap,BufEma,open,high,low,close);
-      if(dir==0)
-         continue;
-
-      //--- ATR-based stop distance, measured on the signal bar
-      double atr=AtrAt(i,InpAtrPeriod,high,low,close);
-      if(atr<=0.0)
-         continue;
-
-      double entry=close[i];
-      double risk=atr*InpSlAtrMult;
-      double sl,tp;
-      if(dir>0)
-        {
-         sl=entry-risk;
-         tp=entry+risk*InpRewardR;
-        }
-      else
-        {
-         sl=entry+risk;
-         tp=entry-risk*InpRewardR;
-        }
 
       if(dir>0)
          BufArrowUp[i]=low[i]-atr*0.35;
       else
          BufArrowDn[i]=high[i]+atr*0.35;
 
-      if(DrawSignalBox(dir,time[i],entry,sl,tp))
+      if(i==last_closed)
         {
-         if(i==last_closed)
-           {
-            newest=time[i];
-            newest_dir=dir;
-            newest_entry=entry;
-            newest_sl=sl;
-            newest_tp=tp;
-           }
+         newest=time[i];
+         newest_dir=dir;
+         newest_entry=entry;
+         newest_sl=sl;
+         newest_tp=tp;
         }
+     }
+
+   //--- pass 2: draw boxes newest-first, bounded by InpHistoryBars and by
+   //--- InpMaxSignals. Drawing every historical signal on a full recalculation
+   //--- would create tens of thousands of chart objects before TrimBoxes()
+   //--- could remove them, which is enough to stall the terminal.
+   int    drawn=0;
+   int    keep=MathMax(1,InpMaxSignals);
+   int    oldest_box=last_closed-MathMax(1,InpHistoryBars)+1;
+   if(oldest_box<sig_start)
+      oldest_box=sig_start;
+
+   for(int i=last_closed;i>=oldest_box && drawn<keep;i--)
+     {
+      int    dir=0;
+      double entry=0.0,sl=0.0,tp=0.0,atr=0.0;
+      if(!SignalBoxAt(i,open,high,low,close,dir,entry,sl,tp,atr))
+         continue;
+      if(DrawSignalBox(dir,time[i],entry,sl,tp))
+         drawn++;
      }
 
    if(newest!=0)

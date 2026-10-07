@@ -27,6 +27,10 @@ InpBoxWidthBars=24
 InpShowRMultiples=true
 InpZonesBehindPrice=true
 
+InpColorProfit=5737262
+InpColorLoss=2237106
+InpColorUp=16748574
+InpColorDown=17919
 InpUseTransparency=false
 InpFillAlpha=55
 
@@ -37,5 +41,6 @@ InpAlertPush=false
 InpAlertEmail=false
 
 InpMaxSignals=40
+InpHistoryBars=500
 InpShowPanel=true
 InpDeleteOnRemove=true

@@ -509,6 +509,48 @@ def collect_symbols(cleaned, raw=""):
     return declared, funcs, def_spans
 
 
+def check_sets(indicator, set_dir):
+    """Every key in a .set preset must be a declared input of the indicator,
+    and every input should appear in the preset. Returns problems."""
+    problems = []
+    raw = indicator.read_text(encoding="utf-8", errors="replace")
+    declared = {}
+    for m in re.finditer(r"^\s*input\s+(?:group\s+)?"
+                         r"(?!(?:group)\b)([A-Za-z_][\w:]*)\s+(Inp\w+)\s*=",
+                         raw, re.M):
+        declared[m.group(2)] = m.group(1)
+
+    if not declared:
+        return [Problem(indicator, 0, "no inputs found - cannot validate presets")]
+
+    for f in sorted(set_dir.glob("*.set")):
+        keys = []
+        for ln, line in enumerate(f.read_text(encoding="utf-8", errors="replace").split("\n"), 1):
+            line = line.strip()
+            if not line or line.startswith(";"):
+                continue
+            if "=" not in line:
+                problems.append(Problem(f, ln, f"malformed line: {line!r}"))
+                continue
+            key, _, val = line.partition("=")
+            key = key.strip()
+            keys.append(key)
+            if key not in declared:
+                problems.append(Problem(f, ln, f"{key} is not an input of "
+                                               f"{indicator.name}"))
+            elif val.strip() == "":
+                problems.append(Problem(f, ln, f"{key} has an empty value"))
+        missing = [k for k in declared if k not in keys]
+        if missing:
+            problems.append(Problem(f, 1, f"missing input(s): {', '.join(sorted(missing))}"))
+        dupes = {k for k in keys if keys.count(k) > 1}
+        if dupes:
+            problems.append(Problem(f, 1, f"duplicate key(s): {', '.join(sorted(dupes))}"))
+        print(f"  {f.name}: {len(keys)} keys, "
+              f"{len(declared)} declared inputs, {len(missing)} missing")
+    return problems
+
+
 def display(path):
     """Path relative to the repo when possible, absolute otherwise."""
     try:
@@ -679,6 +721,13 @@ def main():
             print("  NOT found in the corpus (verify by hand):")
             for n in unverified:
                 print(f"    {n}   (first used in {used_builtins[n]})")
+
+    set_dir = REPO / "Sets"
+    if set_dir.is_dir():
+        indicator = REPO / "MQL5" / "Indicators" / "WeltradeVWAP_9EMA_Signals.mq5"
+        if indicator.exists():
+            print("\n--- preset validation against declared inputs ---")
+            all_problems.extend(check_sets(indicator, set_dir))
 
     if all_unknown:
         print("\n--- identifiers not resolved locally ---")

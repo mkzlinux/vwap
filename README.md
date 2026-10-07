@@ -62,6 +62,13 @@ The box is drawn from the signal bar forward `InpBoxWidthBars` bars, with an
 entry rail, dashed SL/TP rails, a dotted rail at each whole R, and labels
 reading `LONG 1:3 (1234 pts risk)`.
 
+Boxes are created newest-first and capped by `InpMaxSignals` (default 40)
+searching back at most `InpHistoryBars` bars (default 500). Arrows are drawn for
+every signal in the recalculated range, but a box is only ever created for the
+newest signals — drawing one for the whole chart history on first load would
+create tens of thousands of chart objects before they could be trimmed, which is
+enough to stall the terminal. Raise both together if you want more history.
+
 ## VWAP anchor
 
 `InpAnchor` decides when the running totals reset:
@@ -114,10 +121,14 @@ environment, so **the indicators have not been compiled**. What has been run:
 - every identifier resolves to a declaration
 - all 78 MQL5 builtins used are confirmed present in a 3,162-file corpus of
   real MQL5 source
+- every key in every `Sets/*.set` preset is a declared input of the indicator,
+  no input is missing, and none is duplicated
 
 That checker was mutation-tested: an unclosed brace, a wrong argument count, a
 dropped `SetIndexBuffer`, a misspelled builtin, an undeclared variable and a
-misspelled `VwapCore` symbol all fail it.
+misspelled `VwapCore` symbol all fail it. The preset check was mutation-tested
+separately — a renamed key, a deleted key, an empty value and a duplicate key
+all fail it.
 
 `python3 tools/test_vwap_core.py`
 
