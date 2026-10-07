@@ -4,7 +4,7 @@ import SignalPad from './SignalPad.jsx';
 import { SimulatedFeed, Mt5BridgeFeed, INSTRUMENTS, pointFor, applyFeedEvent } from './feed.js';
 import {
   ANCHOR, ENTRY_MODE, AMBIG,
-  buildSignals, summarise,
+  buildSignals, summarise, detectNewSignals,
 } from './engine.js';
 
 const DEFAULTS = {
@@ -106,43 +106,13 @@ export default function App() {
 
   // --- raise alerts for signals we have not seen yet -------------------
   useEffect(() => {
-    const fresh = [];
-
-    for (const inst of INSTRUMENTS) {
-      const c = computed.get(inst.symbol);
-      if (!c || !c.signals.length) continue;
-
-      let seen = seenRef.current.get(inst.symbol);
-      if (!seen) {
-        seen = new Set();
-        seenRef.current.set(inst.symbol, seen);
-      }
-
-      for (const s of c.signals) {
-        if (seen.has(s.time)) continue;
-        seen.add(s.time);
-        if (primedRef.current) {
-          fresh.push({
-            id: `${inst.symbol}-${s.time}`,
-            symbol: inst.symbol,
-            time: s.time,
-            dir: s.dir,
-            entry: s.entry,
-            sl: s.sl,
-            tp: s.tp,
-            digits: inst.digits,
-          });
-        }
-      }
-    }
+    const { alerts: fresh, primedNow } = detectNewSignals(
+      INSTRUMENTS, computed, seenRef.current, primedRef.current,
+    );
+    primedRef.current = primedNow;
 
     // The first pass has just absorbed the whole backfilled history; raising
     // it would fire a dozen alerts and a beep at the moment the page opens.
-    if (!primedRef.current) {
-      primedRef.current = true;
-      return;
-    }
-
     if (fresh.length) {
       setAlerts((a) => [...fresh, ...a].slice(0, 60));
       for (const f of fresh) {

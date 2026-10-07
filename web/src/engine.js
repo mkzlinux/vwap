@@ -335,3 +335,53 @@ export function summarise(signals, rewardR) {
     expectancy: resolved > 0 ? (tp * rewardR - sl) / resolved : 0,
   };
 }
+
+/**
+ * Work out which signals are new since the last pass.
+ *
+ * Extracted from App.jsx so the alert logic is testable: the component and the
+ * tests call this same function rather than the tests re-implementing it.
+ *
+ * `seen` is a Map of symbol -> Set of already-alerted bar times, mutated in
+ * place. `primed` is false on the first pass, which exists only to absorb the
+ * backfilled history - raising it would fire a dozen alerts the moment the
+ * page opens.
+ *
+ * Returns { alerts, primedNow }.
+ */
+export function detectNewSignals(instruments, computed, seen, primed) {
+  const alerts = [];
+
+  for (const inst of instruments) {
+    const c = computed.get(inst.symbol);
+    if (!c || !c.signals.length) continue;
+
+    let seenTimes = seen.get(inst.symbol);
+    if (!seenTimes) {
+      seenTimes = new Set();
+      seen.set(inst.symbol, seenTimes);
+    }
+
+    for (const s of c.signals) {
+      if (seenTimes.has(s.time)) continue;
+      seenTimes.add(s.time);
+      // The priming pass still records every bar time above, but raises
+      // nothing. This is the only guard on that - it used to be duplicated by
+      // a ternary on the return, which meant removing either one was
+      // undetectable because the other still held.
+      if (!primed) continue;
+      alerts.push({
+        id: `${inst.symbol}-${s.time}`,
+        symbol: inst.symbol,
+        time: s.time,
+        dir: s.dir,
+        entry: s.entry,
+        sl: s.sl,
+        tp: s.tp,
+        digits: inst.digits,
+      });
+    }
+  }
+
+  return { alerts, primedNow: true };
+}

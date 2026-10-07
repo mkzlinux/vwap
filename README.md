@@ -237,8 +237,8 @@ The bridge itself has **not been run** — there is no Windows host here and no
 
 `cd web && npm test`
 
-- 28 assertions across the engine, the feed, the box primitive, the mount and
-  the chart-library contract
+- 34 assertions across the engine, the feed, the box primitive, the alerts, the
+  mount and the chart-library contract
 - `tests/engine.test.js` ports the assertions from `tools/test_vwap_core.py`, so
   the browser engine and the MT5 indicator are held to the same expectations
 - `tests/runtime.test.js` drives the simulated feed through the same event
@@ -250,8 +250,13 @@ The bridge itself has **not been run** — there is no Windows host here and no
   jsdom against a recording stub of `lightweight-charts` (jsdom has no canvas).
   It asserts the tree mounts, that three series and the box primitive are
   created, that candles arrive with finite values and ascending times, that all
-  twelve instruments appear on the pad with real prices rather than em-dashes,
-  and that the chart is removed on unmount
+  nineteen instruments appear on the pad with real prices rather than em-dashes,
+  that clicking a row switches the chart and re-fits the view exactly once, and
+  that the chart is removed on unmount
+- `tests/alerts.test.js` covers `detectNewSignals()`: the priming pass records
+  history without raising anything, a later pass raises only unseen bars, a
+  signal is never raised twice, ids do not collide across instruments on the
+  same bar, and `digits` comes from the instrument rather than the signal
 - `tests/lwc-contract.test.js` imports the **real** installed
   `lightweight-charts` and its shipped typings, then checks every symbol and
   option key `Chart.jsx` relies on. The valid option set is derived from the
@@ -270,14 +275,16 @@ not inheritance. It was mutation-tested both ways: a bogus option key
 (`candleGlowIntensity`) fails it, and so does reverting `Chart.jsx` to the v4
 `addCandlestickSeries()` call.
 
-Five real defects were found this way, not by reading the code: a duplicate
+Six real defects were found this way, not by reading the code: a duplicate
 timestamp between the last history bar and the forming bar (lightweight-charts
 rejects non-ascending times outright), `requestUpdate` being called on the
 series when it lives on the attached parameter, a memo dependency list that
 omitted the tick counter, which would have frozen the pad after first paint,
 `SimulatedFeed` never emitting `history`, so the app opened with one candle
-instead of 261, and `fitContent()` running on every data push, which reset the
-user's zoom and pan every five seconds.
+instead of 261, `fitContent()` running on every data push, which reset the
+user's zoom and pan every five seconds, and the alert priming guard being
+written twice - once inside the loop and once on the return - so that removing
+either one was undetectable because the other still held.
 
 Two of those are worth recording because the first version of the test missed
 them. The `history` one asserted against `feed.series()`, which the app never
