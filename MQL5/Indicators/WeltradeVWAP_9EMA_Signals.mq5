@@ -683,20 +683,24 @@ int OnCalculate(const int rates_total,
    //--- InpMaxSignals. Drawing every historical signal on a full recalculation
    //--- would create tens of thousands of chart objects before TrimBoxes()
    //--- could remove them, which is enough to stall the terminal.
-   int    drawn=0;
+   //--- The counter tracks signals SEEN, not boxes newly created: counting
+   //--- creations would keep scanning the whole window on every tick and
+   //--- resurrect the boxes TrimBoxes() had just removed, churning objects
+   //--- forever once the window holds more signals than InpMaxSignals.
+   int    seen=0;
    int    keep=MathMax(1,InpMaxSignals);
    int    oldest_box=last_closed-MathMax(1,InpHistoryBars)+1;
    if(oldest_box<sig_start)
       oldest_box=sig_start;
 
-   for(int i=last_closed;i>=oldest_box && drawn<keep;i--)
+   for(int i=last_closed;i>=oldest_box && seen<keep;i--)
      {
       int    dir=0;
       double entry=0.0,sl=0.0,tp=0.0,atr=0.0;
       if(!SignalBoxAt(i,open,high,low,close,dir,entry,sl,tp,atr))
          continue;
-      if(DrawSignalBox(dir,time[i],entry,sl,tp))
-         drawn++;
+      seen++;
+      DrawSignalBox(dir,time[i],entry,sl,tp);   // idempotent by object name
      }
 
    if(newest!=0)
