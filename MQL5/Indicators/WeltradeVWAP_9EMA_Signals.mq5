@@ -561,9 +561,34 @@ int OnCalculate(const int rates_total,
         }
       if(vwap_start<0)
          vwap_start=0;
-      //--- never recompute fewer bars than have appeared since last time
-      if(vwap_start>prev_calculated-1)
-         vwap_start=prev_calculated-1;
+      //--- Never recompute fewer bars than have appeared since last time. But
+      //--- when we reach back we must land on a session boundary: stopping on
+      //--- an arbitrary bar would accumulate that bar's VWAP from the wrong
+      //--- anchor and overwrite a value an earlier pass had already got right.
+      //--- This is exactly what happens on the first bar of a new session,
+      //--- where the session start is the current bar itself.
+      int need_from=prev_calculated-1;
+      if(need_from<0)
+         need_from=0;
+      if(vwap_start>need_from)
+        {
+         if(InpAnchor==VWAP_ANCHOR_ROLLING)
+           {
+            //--- VwapFill reads back InpRollingBars-1 on its own, so the bar
+            //--- itself is a valid anchor here
+            vwap_start=need_from;
+           }
+         else
+           {
+            datetime nkey=VwapSessionStart(time[need_from],InpAnchor,
+                                           InpSessionHour,InpSessionMinute);
+            vwap_start=need_from;
+            while(vwap_start>0 &&
+                  VwapSessionStart(time[vwap_start-1],InpAnchor,
+                                   InpSessionHour,InpSessionMinute)==nkey)
+               vwap_start--;
+           }
+        }
       if(vwap_start<0)
          vwap_start=0;
      }

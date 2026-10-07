@@ -101,8 +101,30 @@ int OnCalculate(const int rates_total,
         }
       if(start<0)
          start=0;
-      if(start>prev_calculated-1)
-         start=prev_calculated-1;
+      //--- Never recompute fewer bars than have appeared since last time, but
+      //--- land on a session boundary when reaching back - otherwise the extra
+      //--- bars accumulate from the wrong anchor and overwrite values an
+      //--- earlier pass had already got right.
+      int need_from=prev_calculated-1;
+      if(need_from<0)
+         need_from=0;
+      if(start>need_from)
+        {
+         if(InpAnchor==VWAP_ANCHOR_ROLLING)
+           {
+            start=need_from;
+           }
+         else
+           {
+            datetime nkey=VwapSessionStart(time[need_from],InpAnchor,
+                                           InpSessionHour,InpSessionMinute);
+            start=need_from;
+            while(start>0 &&
+                  VwapSessionStart(time[start-1],InpAnchor,
+                                   InpSessionHour,InpSessionMinute)==nkey)
+               start--;
+           }
+        }
       if(start<0)
          start=0;
      }
