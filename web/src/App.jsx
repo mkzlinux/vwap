@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Chart from './Chart.jsx';
 import SignalPad from './SignalPad.jsx';
-import { SimulatedFeed, Mt5BridgeFeed, INSTRUMENTS, pointFor } from './feed.js';
+import { SimulatedFeed, Mt5BridgeFeed, INSTRUMENTS, pointFor, applyFeedEvent } from './feed.js';
 import {
   ANCHOR, ENTRY_MODE, AMBIG,
   buildSignals, summarise,
@@ -57,23 +57,14 @@ export default function App() {
     const off = feed.subscribe((evt) => {
       if (evt.type === 'ready' || evt.type === 'connected') {
         setFeedState('live');
-      } else if (evt.type === 'history') {
-        barsRef.current.set(evt.symbol, [...evt.bars]);
-        setFeedState('live');
-      } else if (evt.type === 'bar') {
-        const arr = barsRef.current.get(evt.symbol);
-        if (!arr) {
-          barsRef.current.set(evt.symbol, [evt.bar]);
-        } else if (evt.closed) {
-          // replace the forming bar with the closed one, then start a new one
-          arr[arr.length - 1] = evt.bar;
-        } else if (arr.length && arr[arr.length - 1].time === evt.bar.time) {
-          arr[arr.length - 1] = evt.bar;
-        } else {
-          arr.push(evt.bar);
-        }
       } else if (evt.type === 'error' || evt.type === 'disconnected') {
         setFeedState(evt.type === 'disconnected' ? 'disconnected' : 'error');
+      } else {
+        // 'history' and 'bar' both fold through the shared reducer
+        if (applyFeedEvent(barsRef.current, evt) && evt.type === 'history') {
+          // the first history payload is what makes the feed usable
+          setFeedState('live');
+        }
       }
       forceTick((n) => n + 1);
     });

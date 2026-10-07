@@ -35,6 +35,48 @@ export function pointFor(digits) {
   return Math.pow(10, -digits);
 }
 
+/**
+ * Fold one feed event into the caller's bar store.
+ *
+ * Lives here rather than inline in App.jsx so the exact code the app runs is
+ * the code the tests exercise. A test that re-implements the handler proves
+ * nothing about the handler.
+ *
+ * `store` is a Map of symbol -> bar array, mutated in place.
+ * Returns true when the event carried data the UI should react to.
+ */
+export function applyFeedEvent(store, evt) {
+  switch (evt.type) {
+    case 'history': {
+      // full rebuild; this is also how a feed seeds itself on connect
+      store.set(evt.symbol, [...evt.bars]);
+      return true;
+    }
+
+    case 'bar': {
+      const arr = store.get(evt.symbol);
+      if (!arr || arr.length === 0) {
+        store.set(evt.symbol, [evt.bar]);
+        return true;
+      }
+      const last = arr.length - 1;
+      if (evt.closed) {
+        // the bar we were building just finished; overwrite the placeholder
+        arr[last] = evt.bar;
+      } else if (arr[last].time === evt.bar.time) {
+        // same bar still forming, replace in place
+        arr[last] = evt.bar;
+      } else {
+        arr.push(evt.bar);
+      }
+      return true;
+    }
+
+    default:
+      return false;
+  }
+}
+
 // --- deterministic PRNG so a reload reproduces the same demo session -------
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -139,6 +181,15 @@ export class SimulatedFeed {
 
     this.connected = true;
     this._emit({ type: 'ready', kind: this.kind, instruments: this.instruments.map((i) => i.symbol) });
+
+    // Seed subscribers with the backfill. Without this the app only ever sees
+    // the one bar per tick that _tick() emits, so the chart opens with a single
+    // candle instead of the generated history. Both feed implementations must
+    // emit 'history' - App.jsx seeds its bar store from that message alone.
+    for (const inst of this.instruments) {
+      const st = this.state.get(inst.symbol);
+      this._emit({ type: 'history', symbol: inst.symbol, bars: [...st.bars, st.cur] });
+    }
 
     this.timer = setInterval(() => this._tick(), this.barMs);
     // one immediate tick so the pad is populated without waiting a full bar

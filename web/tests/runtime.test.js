@@ -9,7 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { SimulatedFeed, INSTRUMENTS, pointFor } from '../src/feed.js';
+import { SimulatedFeed, INSTRUMENTS, pointFor, applyFeedEvent } from '../src/feed.js';
 import { buildSignals, summarise, ANCHOR } from '../src/engine.js';
 import { BoxesPrimitive } from '../src/BoxesPrimitive.js';
 
@@ -48,6 +48,76 @@ test('simulated feed produces rolling bars for every instrument', () => {
     feed.stop();
   }
   assert.equal(feed.connected, false, 'stop disconnects');
+});
+
+/**
+ * Regression test. The feed originally never emitted 'history', so App.jsx
+ * seeded its bar store with a single bar and gained one per tick - the chart
+ * opened with one candle. The earlier test missed it by calling feed.series()
+ * directly, which bypasses the event path the app actually consumes.
+ *
+ * This drives the real feed through the real reducer.
+ */
+test('the app receives the full history through the event path', () => {
+  const feed = new SimulatedFeed({ barMs: 5000, history: 260, seed: 3 });
+  const store = new Map();
+  let sawHistory = 0;
+  feed.subscribe((evt) => {
+    if (applyFeedEvent(store, evt) && evt.type === 'history') sawHistory++;
+  });
+
+  try {
+    feed.start();
+
+    assert.equal(sawHistory, INSTRUMENTS.length, 'one history payload per instrument');
+    assert.equal(store.size, INSTRUMENTS.length, 'every instrument seeded');
+
+    for (const inst of INSTRUMENTS) {
+      const inFeed = feed.series(inst.symbol).length;
+      const inApp = store.get(inst.symbol).length;
+      // the defect: this was 1 while inFeed was 261
+      assert.equal(inApp, inFeed, `${inst.symbol}: app has what the feed has`);
+      assert.ok(inApp >= 260, `${inst.symbol} seeded with real history, got ${inApp}`);
+
+      const t = store.get(inst.symbol).map((b) => b.time);
+      assert.ok(
+        t.every((v, i) => i === 0 || v > t[i - 1]),
+        `${inst.symbol} times strictly ascending (chart requirement)`,
+      );
+    }
+  } finally {
+    feed.stop();
+  }
+});
+
+test('applyFeedEvent folds bar updates without duplicating or skipping', () => {
+  const store = new Map();
+
+  applyFeedEvent(store, { type: 'history', symbol: 'X', bars: [{ time: 1 }, { time: 2 }] });
+  assert.equal(store.get('X').length, 2);
+
+  // same bar still forming -> replace in place, do not append
+  applyFeedEvent(store, { type: 'bar', symbol: 'X', bar: { time: 2, close: 9 }, closed: false });
+  assert.equal(store.get('X').length, 2, 'no duplicate for the forming bar');
+  assert.equal(store.get('X')[1].close, 9, 'forming bar updated in place');
+
+  // bar closes -> overwrite the placeholder
+  applyFeedEvent(store, { type: 'bar', symbol: 'X', bar: { time: 2, close: 10 }, closed: true });
+  assert.equal(store.get('X').length, 2, 'closing does not append');
+  assert.equal(store.get('X')[1].close, 10, 'closed bar replaces the placeholder');
+
+  // a new bar opens -> append
+  applyFeedEvent(store, { type: 'bar', symbol: 'X', bar: { time: 3 }, closed: false });
+  assert.equal(store.get('X').length, 3, 'new bar appends');
+
+  // first event for an unknown symbol must not throw
+  applyFeedEvent(store, { type: 'bar', symbol: 'NEW', bar: { time: 5 }, closed: false });
+  assert.deepEqual(store.get('NEW'), [{ time: 5 }]);
+
+  // non-data events report no change
+  assert.equal(applyFeedEvent(store, { type: 'ready' }), false);
+  assert.equal(applyFeedEvent(store, { type: 'error', message: 'x' }), false);
+  assert.equal(applyFeedEvent(store, { type: 'history', symbol: 'X', bars: [] }), true);
 });
 
 test('feed + engine together yield signals and a consistent tally', () => {

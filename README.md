@@ -236,19 +236,27 @@ The bridge itself has **not been run** — there is no Windows host here and no
 
 `cd web && npm test`
 
-- 20 assertions across the engine, the feed and the box primitive
+- 22 assertions across the engine, the feed and the box primitive
 - `tests/engine.test.js` ports the assertions from `tools/test_vwap_core.py`, so
   the browser engine and the MT5 indicator are held to the same expectations
-- `tests/runtime.test.js` drives the simulated feed and runs the box primitive's
-  canvas maths against a recorded mock context, asserting the profit rect is
-  3× the loss rect, that shorts mirror, that off-screen and empty input draw
-  nothing, and that `update()` requests a repaint
+- `tests/runtime.test.js` drives the simulated feed through the same event
+  reducer `App.jsx` uses, and runs the box primitive's canvas maths against a
+  recorded mock context, asserting the profit rect is 3× the loss rect, that
+  shorts mirror, that off-screen and empty input draw nothing, and that
+  `update()` requests a repaint
 
-Three real defects were found this way, not by reading the code: a duplicate
+Four real defects were found this way, not by reading the code: a duplicate
 timestamp between the last history bar and the forming bar (lightweight-charts
 rejects non-ascending times outright), `requestUpdate` being called on the
-series when it lives on the attached parameter, and a memo dependency list that
-omitted the tick counter, which would have frozen the pad after first paint.
+series when it lives on the attached parameter, a memo dependency list that
+omitted the tick counter, which would have frozen the pad after first paint, and
+`SimulatedFeed` never emitting `history`, so the app opened with one candle
+instead of 261.
+
+That last one is worth recording because the first version of the test missed
+it: it asserted against `feed.series()`, which the app never calls. The bar
+store now folds through `applyFeedEvent()` in `feed.js` — the same function the
+component calls — and reverting the seeding fix makes the test fail.
 
 ## The dashboard (`web/`)
 
