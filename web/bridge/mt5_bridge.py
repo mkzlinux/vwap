@@ -54,10 +54,14 @@ except ImportError:
     sys.exit("websockets is not installed:  pip install websockets")
 
 
+# Kept aligned with INSTRUMENTS in web/src/feed.js so the pad does not show
+# rows the bridge never publishes. Weltrade symbol strings are not guaranteed
+# to match these - the bridge validates each one at startup and warns.
 DEFAULT_SYMBOLS = [
     "EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "USDCHF", "USDCAD",
     "GER30", "US30", "SPX500", "UK100",
     "XAUUSD", "XAGUSD",
+    "AAPL", "MSFT", "NVDA", "AMZN", "TSLA", "GOOGL", "META",
 ]
 
 # Map dashboard timeframes onto MT5 constants.

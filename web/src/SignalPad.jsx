@@ -4,7 +4,7 @@
  * running hit rate / expectancy for that symbol.
  */
 
-const GROUP_ORDER = { FX: 0, Index: 1, Metals: 2 };
+const GROUP_ORDER = { FX: 0, Index: 1, Stocks: 2, Metals: 3 };
 
 export default function SignalPad({ rows, selected, onSelect, digitsFor }) {
   const sorted = [...rows].sort(

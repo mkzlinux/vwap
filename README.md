@@ -316,9 +316,19 @@ for wiring the UI up. It is labelled as such in the interface with a standing
 banner, because a pad that looks live but is not is worse than no pad. For real
 prices, run the bridge (see `web/bridge/README.md`) and switch the source.
 
-The signal pad covers six FX majors (EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF,
-USDCAD), four indices (GER30, US30, SPX500, UK100) and two metals (XAUUSD,
-XAGUSD). Entry mode, VWAP anchor, session hour, ATR stop multiple and reward
-multiple are all changeable live, and the same 1:3 box geometry as the indicator
-follows from the same formula.
+The signal pad covers nineteen instruments: six FX majors (EURUSD, GBPUSD,
+USDJPY, AUDUSD, USDCHF, USDCAD), four indices (GER30, US30, SPX500, UK100),
+seven stock CFDs (AAPL, MSFT, NVDA, AMZN, TSLA, GOOGL, META) and two metals
+(XAUUSD, XAGUSD).
+
+Those symbol strings are a best guess at what Weltrade publishes, not a
+confirmed list — the same caveat as the indicator's presets. Under the MT5
+bridge, any name the terminal does not recognise is reported at startup rather
+than left as a dead row. `tools/test_mt5_bridge.py` group 7 asserts the bridge's
+default symbol list and the pad's `INSTRUMENTS` stay aligned, so adding a row
+without publishing it fails the suite.
+
+Entry mode, VWAP anchor, session hour, ATR stop multiple and reward multiple are
+all changeable live, and the same 1:3 box geometry as the indicator follows from
+the same formula.
 

@@ -19,6 +19,7 @@ import { writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { JSDOM } from 'jsdom';
+import { INSTRUMENTS } from '../src/feed.js';
 import { createRequire } from 'node:module';
 
 // the bundle is CJS; this test file is ESM
@@ -158,9 +159,8 @@ test('App.jsx mounts, renders the pad, and drives the chart', async () => {
     assert.ok(html.includes('SIMULATED FEED'), 'feed badge rendered');
     assert.ok(html.includes('Prices are simulated'), 'the warning banner is shown');
 
-    // all twelve instruments are on the pad
-    for (const sym of ['EURUSD', 'GBPUSD', 'USDJPY', 'AUDUSD', 'USDCHF', 'USDCAD',
-      'GER30', 'US30', 'SPX500', 'UK100', 'XAUUSD', 'XAGUSD']) {
+    // every instrument the feed advertises must reach the pad
+    for (const sym of INSTRUMENTS.map((i) => i.symbol)) {
       assert.ok(html.includes(sym), `${sym} row present on the pad`);
     }
 
@@ -168,7 +168,7 @@ test('App.jsx mounts, renders the pad, and drives the chart', async () => {
     const prices = [...container.querySelectorAll('tbody tr')].map(
       (tr) => tr.children[1]?.textContent,
     );
-    assert.equal(prices.length, 12, 'twelve rows in the pad');
+    assert.equal(prices.length, INSTRUMENTS.length, 'one row per instrument');
     assert.ok(prices.every((p) => p && p !== '—'), `every row has a price, got ${prices}`);
 
     // --- the view is fitted once, not on every tick ---

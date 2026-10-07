@@ -29,6 +29,14 @@ export const INSTRUMENTS = [
   // --- spot metals ---
   { symbol: 'XAUUSD', group: 'Metals', base: 2340.50, digits: 2, vol: 1.35 },
   { symbol: 'XAGUSD', group: 'Metals', base: 27.40,   digits: 3, vol: 0.021 },
+  // --- stock CFDs ---
+  { symbol: 'AAPL',  group: 'Stocks', base: 227.0,  digits: 2, vol: 0.85 },
+  { symbol: 'MSFT',  group: 'Stocks', base: 415.0,  digits: 2, vol: 1.60 },
+  { symbol: 'NVDA',  group: 'Stocks', base: 121.0,  digits: 2, vol: 0.95 },
+  { symbol: 'AMZN',  group: 'Stocks', base: 186.0,  digits: 2, vol: 0.80 },
+  { symbol: 'TSLA',  group: 'Stocks', base: 248.0,  digits: 2, vol: 2.40 },
+  { symbol: 'GOOGL', group: 'Stocks', base: 164.0,  digits: 2, vol: 0.70 },
+  { symbol: 'META',  group: 'Stocks', base: 505.0,  digits: 2, vol: 2.10 },
 ];
 
 export function pointFor(digits) {

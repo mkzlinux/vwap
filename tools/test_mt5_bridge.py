@@ -13,6 +13,7 @@ Requires the `websockets` package (the bridge imports it at module scope).
 """
 
 import importlib
+import re
 import sys
 import types
 from pathlib import Path
@@ -204,6 +205,21 @@ for key in ('"ready"', '"history"', '"bar"', '"error"', '"closed"', '"symbol"', 
 # bar keys the JS side reads off the wire
 for k in ("time", "open", "high", "low", "close", "volume"):
     check_true(f"bar field {k!r} is consumed by feed.js", k in feed_src)
+
+# --- 7. the bridge publishes what the pad advertises -------------------------
+print("\n--- 7. bridge symbols stay aligned with web/src/feed.js ---")
+feed_src_full = (REPO / "web" / "src" / "feed.js").read_text(encoding="utf-8")
+pad_block = feed_src_full.split("INSTRUMENTS = [", 1)[1].split("\n];", 1)[0]
+pad_symbols = re.findall(r"symbol:\s*'([A-Z0-9]+)'", pad_block)
+
+check_true("pad advertises instruments", len(pad_symbols) > 0)
+check("no duplicate pad symbols",
+      len(pad_symbols), len(set(pad_symbols)))
+check("every pad symbol is published by the bridge by default",
+      sorted(set(pad_symbols) - set(bridge.DEFAULT_SYMBOLS)), [])
+check("every default bridge symbol has a pad row",
+      sorted(set(bridge.DEFAULT_SYMBOLS) - set(pad_symbols)), [])
+
 
 print()
 print(f"{PASS} assertion(s) passed, {FAIL} failed")
