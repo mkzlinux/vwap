@@ -225,11 +225,12 @@ solid fill plus draw order instead.
 
 - injects a mock `MetaTrader5` into `sys.modules`, then imports and drives the
   **shipped** `web/bridge/mt5_bridge.py`
-- 6 groups, 38 assertions: bar flattening, history tailing (newest bars,
+- 7 groups, 42 assertions: bar flattening, history tailing (newest bars,
   ascending times, unknown symbol, more bars requested than exist), the tick
   fallback including `bid`→`last`→`ask` degradation, the timeframe map, the
-  default symbol list, and that every protocol key the bridge emits is one
-  `web/src/feed.js` documents
+  default symbol list, that every protocol key the bridge emits is one
+  `web/src/feed.js` documents, and that the bridge's default symbols and the
+  pad's `INSTRUMENTS` agree in both directions
 
 The bridge itself has **not been run** — there is no Windows host here and no
 `MetaTrader5` wheel installable on Linux. See `web/bridge/README.md`.
