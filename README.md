@@ -236,7 +236,8 @@ The bridge itself has **not been run** — there is no Windows host here and no
 
 `cd web && npm test`
 
-- 23 assertions across the engine, the feed, the box primitive and the mount
+- 28 assertions across the engine, the feed, the box primitive, the mount and
+  the chart-library contract
 - `tests/engine.test.js` ports the assertions from `tools/test_vwap_core.py`, so
   the browser engine and the MT5 indicator are held to the same expectations
 - `tests/runtime.test.js` drives the simulated feed through the same event
@@ -250,6 +251,23 @@ The bridge itself has **not been run** — there is no Windows host here and no
   created, that candles arrive with finite values and ascending times, that all
   twelve instruments appear on the pad with real prices rather than em-dashes,
   and that the chart is removed on unmount
+- `tests/lwc-contract.test.js` imports the **real** installed
+  `lightweight-charts` and its shipped typings, then checks every symbol and
+  option key `Chart.jsx` relies on. The valid option set is derived from the
+  typings rather than written out by hand, so it cannot drift from what the
+  library declares. This is the only coverage of the real library - jsdom has no
+  canvas, and `canvas` cannot be built here (no prebuilt binary reachable, no
+  Cairo headers), so `tests/mount.test.js` has to stub it
+
+Writing the contract test took three attempts to get right, and all three bugs
+were in the test, not the chart code: `defaultOptions` on a series definition
+holds only type-specific defaults, so the common options had to be read off
+`SeriesOptionsCommon`; `SeriesMarkerBar` inherits `time`/`shape`/`color`/`text`
+from `SeriesMarkerBase`; and `SeriesAttachedParameter<..., TSeriesType extends
+SeriesType = ...>` contains the word `extends` as a generic constraint, which is
+not inheritance. It was mutation-tested both ways: a bogus option key
+(`candleGlowIntensity`) fails it, and so does reverting `Chart.jsx` to the v4
+`addCandlestickSeries()` call.
 
 Five real defects were found this way, not by reading the code: a duplicate
 timestamp between the last history bar and the forming bar (lightweight-charts
