@@ -396,6 +396,12 @@ void MarkOutcome(const string base,
    if(ObjectFind(0,mk)<0)
       if(!ObjectCreate(0,mk,OBJ_ARROW,0,ht,lvl))
          return;
+   //--- ObjectCreate only runs on the first pass, so the anchor has to be
+   //--- restated every pass. Otherwise changing InpAmbiguousFirst would flip
+   //--- the arrow's code and colour while leaving it parked at the price of
+   //--- the outcome it used to show.
+   ObjectSetInteger(0,mk,OBJPROP_TIME,0,ht);
+   ObjectSetDouble(0,mk,OBJPROP_PRICE,0,lvl);
    ObjectSetInteger(0,mk,OBJPROP_ARROWCODE,outcome>0?233:234);
    ObjectSetInteger(0,mk,OBJPROP_COLOR,clr);
    ObjectSetInteger(0,mk,OBJPROP_WIDTH,2);
@@ -407,6 +413,8 @@ void MarkOutcome(const string base,
    string txt=(outcome>0?"TP +":"SL -")+DoubleToString(InpRewardR,1)+"R";
    MakeText(base+"_mktx",ht,lvl,txt,clr,8,
             (outcome>0?ANCHOR_LEFT_UPPER:ANCHOR_LEFT_LOWER));
+   ObjectSetInteger(0,base+"_mktx",OBJPROP_TIME,0,ht);
+   ObjectSetDouble(0,base+"_mktx",OBJPROP_PRICE,0,lvl);
 
    //--- end the box where the trade ended
    if(InpTruncateOnHit)
