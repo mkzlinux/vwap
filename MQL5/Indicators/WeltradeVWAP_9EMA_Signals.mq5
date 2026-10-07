@@ -59,6 +59,12 @@ enum ENUM_VWAP_EMA_PRICE
   };
 
 //+------------------------------------------------------------------+
+//| ENUM_VWAP_AMBIG (how to treat a bar that touches both levels)    |
+//| lives in VwapCore.mqh alongside VwapEvaluateOutcome(), so the    |
+//| outcome rule is shared rather than duplicated here.              |
+//+------------------------------------------------------------------+
+
+//+------------------------------------------------------------------+
 //| Inputs                                                           |
 //+------------------------------------------------------------------+
 input group "VWAP session"
@@ -98,6 +104,12 @@ input string             InpSoundFile      = "alert.wav"; // Sound file
 input bool               InpAlertPush      = false;  // Push notification
 input bool               InpAlertEmail     = false;  // Email
 
+input group "Outcome marking"
+input bool               InpMarkOutcome    = true;           // Mark when SL or TP is hit
+input bool               InpTruncateOnHit  = true;           // End the box at the hit bar
+input ENUM_VWAP_AMBIG    InpAmbiguousFirst = AMBIG_SL_FIRST; // One bar touches both
+input bool               InpShowStats      = true;           // Hit rate and expectancy in the panel
+
 input group "Display"
 input int                InpMaxSignals     = 40;     // Max boxes on the chart
 input int                InpHistoryBars    = 500;    // Bars back to search for boxes
@@ -122,6 +134,19 @@ int      g_cache_start   = -1;
 int      g_cache_total   = -1;
 datetime g_last_alert    = 0;
 int      g_box_count     = 0;
+int      g_tp_hits       = 0;
+int      g_sl_hits       = 0;
+int      g_open_sigs     = 0;
+
+//+------------------------------------------------------------------+
+//| Object-name stem for the signal on bar time t. Shared by the box |
+//| drawing, the outcome marking and the trimming, so the three can  |
+//| never disagree about which objects belong to which signal.       |
+//+------------------------------------------------------------------+
+string SignalBoxName(const datetime t,const int dir)
+  {
+   return(g_prefix+IntegerToString((long)t)+"_"+(dir>0?"L":"S"));
+  }
 
 //+------------------------------------------------------------------+
 //| Init                                                             |
@@ -236,7 +261,7 @@ void MakeText(const string name,const datetime t,const double p,const string txt
 //+------------------------------------------------------------------+
 bool DrawSignalBox(const int dir,const datetime t,const double entry,const double sl,const double tp)
   {
-   string base=g_prefix+IntegerToString((long)t)+"_"+(dir>0?"L":"S");
+   string base=SignalBoxName(t,dir);
    if(ObjectFind(0,base+"_e")>=0)
       return(false);
 
@@ -282,6 +307,110 @@ bool DrawSignalBox(const int dir,const datetime t,const double entry,const doubl
 
    ChartRedraw(0);
    return(true);
+  }
+
+//+------------------------------------------------------------------+
+//| Walk forward from the signal bar and report which level price    |
+//| reached first. Returns +1 take profit, -1 stop loss, 0 neither.  |
+//| Only closed bars are considered, so an outcome never flickers.   |
+//+------------------------------------------------------------------+
+//| Resolve a signal against later price action. The scan itself is  |
+//| VwapEvaluateOutcome() in VwapCore.mqh, which is covered by       |
+//| tools/test_vwap_core.py - this wrapper only supplies the inputs. |
+//+------------------------------------------------------------------+
+int EvaluateOutcome(const int dir,
+                    const int sig_bar,
+                    const int last_closed,
+                    const double sl,
+                    const double tp,
+                    const double &high[],
+                    const double &low[],
+                    int &hit_bar)
+  {
+   return(VwapEvaluateOutcome(dir,sig_bar,last_closed,sl,tp,high,low,
+                              InpAmbiguousFirst,hit_bar));
+  }
+
+//+------------------------------------------------------------------+
+//| Move every rail and zone of a box so it ends at t_end            |
+//+------------------------------------------------------------------+
+void SetBoxEnd(const string base,const datetime t_end)
+  {
+   ObjectSetInteger(0,base+"_lz",OBJPROP_TIME,1,t_end);
+   ObjectSetInteger(0,base+"_pz",OBJPROP_TIME,1,t_end);
+   ObjectSetInteger(0,base+"_e", OBJPROP_TIME,1,t_end);
+   ObjectSetInteger(0,base+"_sl",OBJPROP_TIME,1,t_end);
+   ObjectSetInteger(0,base+"_tp",OBJPROP_TIME,1,t_end);
+
+   int steps=(int)MathFloor(InpRewardR+1e-8);
+   for(int r=1;r<steps;r++)
+      ObjectSetInteger(0,base+"_r"+IntegerToString(r),OBJPROP_TIME,1,t_end);
+
+   //--- the two right-edge labels travel with the rails
+   ObjectSetInteger(0,base+"_tpl",OBJPROP_TIME,0,t_end);
+   ObjectSetInteger(0,base+"_sll",OBJPROP_TIME,0,t_end);
+  }
+
+//+------------------------------------------------------------------+
+//| Mark the result of a signal once price has resolved it.          |
+//| Idempotent: safe to call on every pass, it only ever moves       |
+//| objects to where they already are.                               |
+//+------------------------------------------------------------------+
+void MarkOutcome(const string base,
+                 const int dir,
+                 const int sig_bar,
+                 const int last_closed,
+                 const double sl,
+                 const double tp,
+                 const datetime &time[],
+                 const double &high[],
+                 const double &low[])
+  {
+   int hit_bar=0;
+   int outcome=EvaluateOutcome(dir,sig_bar,last_closed,sl,tp,high,low,hit_bar);
+
+   if(outcome==0)
+     {
+      g_open_sigs++;
+      //--- nothing resolved yet: drop any stale mark and restore full width
+      if(ObjectFind(0,base+"_mk")>=0)
+        {
+         ObjectDelete(0,base+"_mk");
+         ObjectDelete(0,base+"_mktx");
+         SetBoxEnd(base,time[sig_bar]+(datetime)(MathMax(2,InpBoxWidthBars)*PeriodSeconds(_Period)));
+        }
+      return;
+     }
+
+   if(outcome>0)
+      g_tp_hits++;
+   else
+      g_sl_hits++;
+
+   color   clr=(outcome>0?InpColorProfit:InpColorLoss);
+   double  lvl=(outcome>0?tp:sl);
+   datetime ht=time[hit_bar];
+
+   //--- arrow marker: up = target reached, down = stop reached
+   string mk=base+"_mk";
+   if(ObjectFind(0,mk)<0)
+      if(!ObjectCreate(0,mk,OBJ_ARROW,0,ht,lvl))
+         return;
+   ObjectSetInteger(0,mk,OBJPROP_ARROWCODE,outcome>0?233:234);
+   ObjectSetInteger(0,mk,OBJPROP_COLOR,clr);
+   ObjectSetInteger(0,mk,OBJPROP_WIDTH,2);
+   ObjectSetInteger(0,mk,OBJPROP_BACK,false);
+   ObjectSetInteger(0,mk,OBJPROP_SELECTABLE,false);
+   ObjectSetInteger(0,mk,OBJPROP_HIDDEN,true);
+
+   //--- text marker
+   string txt=(outcome>0?"TP +":"SL -")+DoubleToString(InpRewardR,1)+"R";
+   MakeText(base+"_mktx",ht,lvl,txt,clr,8,
+            (outcome>0?ANCHOR_LEFT_UPPER:ANCHOR_LEFT_LOWER));
+
+   //--- end the box where the trade ended
+   if(InpTruncateOnHit)
+      SetBoxEnd(base,ht);
   }
 
 //+------------------------------------------------------------------+
@@ -718,6 +847,12 @@ int OnCalculate(const int rates_total,
    if(oldest_box<sig_start)
       oldest_box=sig_start;
 
+   //--- tallies cover exactly the boxes on the chart, so they are rebuilt
+   //--- from scratch every pass rather than accumulated
+   g_tp_hits=0;
+   g_sl_hits=0;
+   g_open_sigs=0;
+
    for(int i=last_closed;i>=oldest_box && seen<keep;i--)
      {
       int    dir=0;
@@ -726,6 +861,11 @@ int OnCalculate(const int rates_total,
          continue;
       seen++;
       DrawSignalBox(dir,time[i],entry,sl,tp);   // idempotent by object name
+
+      if(InpMarkOutcome)
+         MarkOutcome(SignalBoxName(time[i],dir),dir,i,last_closed,sl,tp,time,high,low);
+      else
+         g_open_sigs++;
      }
 
    if(newest!=0)
@@ -790,8 +930,27 @@ void UpdatePanel(const int rates_total)
               DoubleToString(vwap,_Digits)+"\n"+
               "EMA "+IntegerToString(InpEmaPeriod)+"  "+DoubleToString(ema,_Digits)+"\n"+
               bias+"\n"+
-              "Mode: "+ModeText()+"     Target "+RewardText()+"\n"+
-              "Signals only - no orders are placed";
+              "Mode: "+ModeText()+"     Target "+RewardText()+"\n";
+
+   if(InpShowStats && InpMarkOutcome)
+     {
+      int resolved=g_tp_hits+g_sl_hits;
+      if(resolved>0)
+        {
+         //--- expectancy in R: a win pays InpRewardR, a loss costs 1R
+         double exp_r=((double)g_tp_hits*InpRewardR-(double)g_sl_hits)/(double)resolved;
+         txt+="Last "+IntegerToString(g_box_count)+" signals:  "+
+              IntegerToString(g_tp_hits)+" TP / "+
+              IntegerToString(g_sl_hits)+" SL / "+
+              IntegerToString(g_open_sigs)+" open\n"+
+              "Hit rate "+DoubleToString(100.0*(double)g_tp_hits/(double)resolved,1)+"%"+
+              "     Expectancy "+(exp_r>=0.0?"+":"")+DoubleToString(exp_r,2)+"R\n";
+        }
+      else
+         txt+="No resolved signals yet ("+IntegerToString(g_open_sigs)+" open)\n";
+     }
+
+   txt+="Signals only - no orders are placed";
 
    Comment(txt);
   }

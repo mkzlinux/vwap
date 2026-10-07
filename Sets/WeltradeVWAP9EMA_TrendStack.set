@@ -7,6 +7,7 @@
 ;   InpAnchor     0=Daily@custom hour  1=Daily@00:00  2=Weekly(Mon)  3=Rolling
 ;   InpEntryMode  0=EMA cross VWAP     1=Price+EMA+VWAP stack       2=VWAP pullback
 ;   InpEmaPrice   0=Close              1=Typical (O+H+L+C)/4
+;   InpAmbiguousFirst 0=stop first     1=target first  (one bar touches both)
 
 InpAnchor=0
 InpSessionHour=0
@@ -39,6 +40,11 @@ InpAlertSound=false
 InpSoundFile=alert.wav
 InpAlertPush=false
 InpAlertEmail=false
+
+InpMarkOutcome=true
+InpTruncateOnHit=true
+InpAmbiguousFirst=0
+InpShowStats=true
 
 InpMaxSignals=40
 InpHistoryBars=500

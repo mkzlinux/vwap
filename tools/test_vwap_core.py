@@ -214,6 +214,106 @@ int main(void)
       check_close("zero-volume bar 2 excluded, bar5 VWAP", dst[5], pv/vv, 1e-9);
    }
 
+
+   printf("--- 9. outcome marking: which level price reaches first ---\n");
+   {
+      double h[10], l[10];
+      int hb=-1, r;
+
+      /* long: entry 100, stop 98, target 106 */
+      for (int i=0;i<10;i++) { h[i]=101.0; l[i]=99.0; }   /* never resolves */
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, no level touched -> still open", (long)r, 0);
+      check_eq("  hit_bar stays 0", (long)hb, 0);
+
+      h[4]=106.5;
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, high>=TP on bar 4 -> TP", (long)r, 1);
+      check_eq("  hit_bar is 4", (long)hb, 4);
+      h[4]=101.0;
+
+      l[6]=97.5;
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, low<=SL on bar 6 -> SL", (long)r, -1);
+      check_eq("  hit_bar is 6", (long)hb, 6);
+
+      h[8]=106.5;   /* l[6] still low: stop came first */
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, SL on 6 before TP on 8 -> SL", (long)r, -1);
+      check_eq("  hit_bar is 6", (long)hb, 6);
+      l[6]=99.0; h[8]=101.0;   /* clear both, or later cases inherit a TP hit */
+
+      h[3]=106.5; l[7]=97.5;   /* target came first */
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, TP on 3 before SL on 7 -> TP", (long)r, 1);
+      check_eq("  hit_bar is 3", (long)hb, 3);
+
+      h[3]=101.0; l[7]=99.0; h[9]=106.5;
+      r = VwapEvaluateOutcome(1,0,8,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, TP only on bar 9 but last_closed=8 -> open", (long)r, 0);
+      h[9]=101.0;
+
+      h[0]=110.0; l[0]=90.0;   /* the signal bar itself spans both */
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, signal bar spans both levels -> not a hit", (long)r, 0);
+      h[0]=101.0; l[0]=99.0;
+
+      /* short: entry 100, stop 102, target 94 */
+      for (int i=0;i<10;i++) { h[i]=101.0; l[i]=99.0; }
+      l[5]=93.5;
+      r = VwapEvaluateOutcome(-1,0,9,102.0,94.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("short, low<=TP on bar 5 -> TP", (long)r, 1);
+      check_eq("  hit_bar is 5", (long)hb, 5);
+      l[5]=99.0;
+
+      h[5]=102.5;
+      r = VwapEvaluateOutcome(-1,0,9,102.0,94.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("short, high>=SL on bar 5 -> SL", (long)r, -1);
+      check_eq("  hit_bar is 5", (long)hb, 5);
+      h[5]=101.0;
+
+      /* one bar spanning both levels: the assumption decides */
+      h[2]=106.5; l[2]=97.5;
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("ambiguous bar, SL-first assumption -> SL", (long)r, -1);
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_TP_FIRST,&hb);
+      check_eq("ambiguous bar, TP-first assumption -> TP", (long)r, 1);
+      check_eq("  hit_bar is 2 either way", (long)hb, 2);
+
+      /* exact-touch boundary: a level merely touched counts as hit, which is
+         the conservative convention - the stop is assumed filled if the low
+         reaches it exactly. Pinning this stops <= silently becoming <. */
+      for (int i=0;i<10;i++) { h[i]=101.0; l[i]=99.0; }
+      l[4]=98.0;                       /* low == stop exactly */
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, low exactly == SL -> SL", (long)r, -1);
+      check_eq("  hit_bar is 4", (long)hb, 4);
+      l[4]=99.0;
+
+      h[4]=106.0;                      /* high == target exactly */
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, high exactly == TP -> TP", (long)r, 1);
+      check_eq("  hit_bar is 4", (long)hb, 4);
+      h[4]=101.0;
+
+      /* one tick short of the level must NOT count */
+      l[4]=98.0000001;
+      r = VwapEvaluateOutcome(1,0,9,98.0,106.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("long, low a tick above SL -> still open", (long)r, 0);
+      l[4]=99.0;
+
+      h[3]=102.0;                      /* short: high == stop exactly */
+      r = VwapEvaluateOutcome(-1,0,9,102.0,94.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("short, high exactly == SL -> SL", (long)r, -1);
+      h[3]=101.0;
+
+      l[3]=94.0;                       /* short: low == target exactly */
+      r = VwapEvaluateOutcome(-1,0,9,102.0,94.0,h,l,AMBIG_SL_FIRST,&hb);
+      check_eq("short, low exactly == TP -> TP", (long)r, 1);
+      l[3]=99.0;
+   }
+
+
    printf("\n%s (%d failure(s))\n", failures? "FAILED":"ALL TESTS PASSED", failures);
    return failures?1:0;
 }
@@ -249,10 +349,51 @@ def drop_function(text, name):
     raise SystemExit(f"unbalanced braces in {name}")
 
 
+def rewrite_scalar_refs(c):
+    """MQL5 passes scalars by reference with `int &out`. The C shim needs a
+    pointer, and every use inside the body must be dereferenced. Array refs
+    are left alone - `double &a[]` already becomes a usable pointer."""
+    scalar = r"(?:int|long|double|bool|datetime|float|short|char)"
+    out = []
+    pos = 0
+    # find each function definition, then rewrite its signature and body
+    for m in re.finditer(r"\n(" + scalar + r"|string)\s+(\w+)\s*\(([^;{]*?)\)\s*\n?\s*\{", c):
+        sig_start, sig_end = m.start(3), m.end(3)
+        params = m.group(3)
+        refs = re.findall(r"\b(" + scalar + r")\s*&\s*(\w+)\s*(?!\[)", params)
+        if not refs:
+            continue
+        # locate the matching closing brace of the body
+        i = c.index("{", m.end() - 1)
+        depth, j = 0, i
+        while j < len(c):
+            if c[j] == "{":
+                depth += 1
+            elif c[j] == "}":
+                depth -= 1
+                if depth == 0:
+                    break
+            j += 1
+        body = c[i + 1:j]
+        new_params = params
+        for _typ, name in refs:
+            new_params = re.sub(r"\b" + _typ + r"\s*&\s*" + name + r"\b(?!\s*\[)",
+                                _typ + " *" + name, new_params)
+            body = re.sub(r"(?<![.\w])" + name + r"(?![\w])", "(*" + name + ")", body)
+        out.append((sig_start, sig_end, new_params))
+        out.append((i + 1, j, body))
+    # apply replacements back-to-front so offsets stay valid
+    for start, end, text in sorted(out, key=lambda t: -t[0]):
+        c = c[:start] + text + c[end:]
+    return c
+
+
 def transpile(src_text):
     c = strip_preproc_and_comments(src_text)
     # VwapAnchorText only exists for on-chart labels and uses MQL5 strings
     c = drop_function(c, "VwapAnchorText")
+    # scalar out-parameters passed by reference -> pointer + dereference
+    c = rewrite_scalar_refs(c)
     # array-reference parameters -> pointers
     c = re.sub(r"\bconst\s+(double|long|int|datetime)\s*&\s*(\w+)\s*\[\s*\]", r"const \1 *\2", c)
     c = re.sub(r"\b(double|long|int|datetime)\s*&\s*(\w+)\s*\[\s*\]", r"\1 *\2", c)

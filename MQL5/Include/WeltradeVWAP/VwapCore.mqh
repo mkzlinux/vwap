@@ -82,6 +82,77 @@ datetime VwapSessionStart(const datetime t,
   }
 
 //+------------------------------------------------------------------+
+//| A single bar that touches both the stop and the target gives no  |
+//| way to know which came first. Pick the assumption.               |
+//+------------------------------------------------------------------+
+enum ENUM_VWAP_AMBIG
+  {
+   AMBIG_SL_FIRST = 0,  // Stop loss first (conservative)
+   AMBIG_TP_FIRST = 1   // Take profit first (optimistic)
+  };
+
+//+------------------------------------------------------------------+
+//| Walk forward from a signal bar and report which level price      |
+//| reached first.                                                   |
+//|                                                                  |
+//| Returns +1 take profit, -1 stop loss, 0 neither yet. hit_bar is  |
+//| set to the resolving bar index, or 0 when unresolved.            |
+//|                                                                  |
+//| The scan starts at sig_bar+1: the signal bar's own range is      |
+//| allowed to overshoot both levels without counting as a hit,      |
+//| because entry is taken on its close.                             |
+//|                                                                  |
+//| All arrays are absolute-indexed and non-series, like OnCalculate |
+//| parameters, and only bars up to last_closed are examined so an   |
+//| outcome never changes once recorded.                             |
+//+------------------------------------------------------------------+
+int VwapEvaluateOutcome(const int dir,
+                        const int sig_bar,
+                        const int last_closed,
+                        const double sl,
+                        const double tp,
+                        const double &high[],
+                        const double &low[],
+                        const ENUM_VWAP_AMBIG ambiguous,
+                        int &hit_bar)
+  {
+   hit_bar=0;
+
+   for(int j=sig_bar+1;j<=last_closed;j++)
+     {
+      bool tp_hit,sl_hit;
+      if(dir>0)
+        {
+         tp_hit=(high[j]>=tp);
+         sl_hit=(low[j]<=sl);
+        }
+      else
+        {
+         tp_hit=(low[j]<=tp);
+         sl_hit=(high[j]>=sl);
+        }
+
+      if(tp_hit && sl_hit)
+        {
+         //--- one bar spanned both levels; intra-bar order is unknowable
+         hit_bar=j;
+         return(ambiguous==AMBIG_TP_FIRST?1:-1);
+        }
+      if(tp_hit)
+        {
+         hit_bar=j;
+         return(1);
+        }
+      if(sl_hit)
+        {
+         hit_bar=j;
+         return(-1);
+        }
+     }
+   return(0);
+  }
+
+//+------------------------------------------------------------------+
 //| Human readable description of the anchor (for on-chart panels)   |
 //+------------------------------------------------------------------+
 string VwapAnchorText(const ENUM_VWAP_ANCHOR anchor,
