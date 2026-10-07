@@ -661,10 +661,34 @@ def include_closure(path, seen=None):
     return out
 
 
+def collect_evidence(paths):
+    """Builtins confirmed real out-of-band, recorded in a checked-in file.
+
+    The bundled corpus is a small sample of real MQL5 source, so a builtin
+    missing from it is not evidence of a typo. tools/mql5_builtin_evidence.txt
+    records those names with the GitHub code-search hit count that established
+    them, so the claim is reproducible instead of resting on memory."""
+    names = {}
+    for p in paths:
+        try:
+            txt = Path(p).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            print(f"warning: cannot read evidence file {p}")
+            continue
+        for line in txt.splitlines():
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            parts = line.split()
+            names[parts[0]] = parts[1] if len(parts) > 1 else "?"
+    return names
+
+
 def main():
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     stdlib_dirs = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--stdlib=")]
     corpus_dirs = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--corpus=")]
+    evidence_files = [a.split("=", 1)[1] for a in sys.argv[1:] if a.startswith("--evidence=")]
 
     if args:
         files = [Path(a) for a in args]
@@ -673,8 +697,12 @@ def main():
 
     stdlib_funcs, stdlib_consts = collect_stdlib(stdlib_dirs)
     corpus, corpus_files = collect_corpus(corpus_dirs or stdlib_dirs)
+    evidence = collect_evidence(evidence_files)
     print(f"reference corpus: {corpus_files} MQL5 file(s) -> {len(stdlib_funcs)} "
           f"stdlib functions, {len(corpus)} identifiers")
+    if evidence:
+        print(f"external evidence file: {len(evidence)} builtin(s) confirmed by "
+              f"GitHub code search")
 
     all_problems = []
     all_unknown = {}
@@ -715,10 +743,19 @@ def main():
     if not corpus:
         print("  skipped - pass --corpus=DIR with real MQL5 sources to enable")
     else:
-        unverified = sorted(n for n in used_builtins if n not in corpus)
-        print(f"  confirmed present in real MQL5 source: {len(used_builtins) - len(unverified)}")
+        absent = sorted(n for n in used_builtins if n not in corpus)
+        # An absent builtin counts as confirmed only if the checked-in evidence
+        # file establishes it; otherwise it is reported as unverified.
+        unverified = [n for n in absent if n not in evidence]
+        backed = [n for n in absent if n in evidence]
+        print(f"  confirmed present in real MQL5 source: {len(used_builtins) - len(absent)}")
+        if backed:
+            print(f"  absent from the corpus but confirmed by external evidence: "
+                  f"{len(backed)}")
+            for n in backed:
+                print(f"    {n}   ({evidence[n]} .mqh hit(s))")
         if unverified:
-            print("  NOT found in the corpus (verify by hand):")
+            print("  NOT confirmed anywhere (verify by hand):")
             for n in unverified:
                 print(f"    {n}   (first used in {used_builtins[n]})")
 
@@ -744,11 +781,30 @@ def main():
     if fatal:
         print(f"FAIL: {len(all_problems)} structural problem(s), "
               f"{len(all_unknown)} unresolved identifier(s)")
+        if unverified:
+            print(f"       ({len(unverified)} builtin(s) also absent from the "
+                  f"reference corpus)")
         return 1
+
+    # A builtin absent from the corpus is not a structural fault: the corpus is
+    # only a sample of real MQL5 source, so absence is weak evidence. It is
+    # still reported, because claiming "all confirmed" when some were not would
+    # be false - and this line used to say exactly that.
+    absent_n = len(unverified)
+    if not corpus:
+        builtin_txt = (f"{len(used_builtins)} MQL5 builtins used, NOT verified "
+                       f"(pass --corpus=DIR to verify)")
+    elif absent_n:
+        builtin_txt = (f"{len(used_builtins) - absent_n}/{len(used_builtins)} "
+                       f"MQL5 builtins confirmed (corpus or external evidence), "
+                       f"{absent_n} NOT confirmed (see list above)")
+    else:
+        builtin_txt = (f"{len(used_builtins)} MQL5 builtins used, all confirmed "
+                       f"(reference corpus + external evidence)")
+
     print(f"OK: {len(files)} file(s) clean - balanced delimiters, buffer/plot "
           f"counts consistent, every call resolves with a matching argument "
-          f"count, every identifier declared; {len(used_builtins)} MQL5 "
-          f"builtins used, all confirmed in the reference corpus")
+          f"count, every identifier declared; {builtin_txt}")
     return 0
 
 

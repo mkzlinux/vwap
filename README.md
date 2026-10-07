@@ -16,8 +16,12 @@ Built for Weltrade synthetics (SyntX), currencies and spot metals.
 | `MQL5/Indicators/WeltradeVWAP.mq5` | VWAP line on its own, for overlaying other work |
 | `MQL5/Include/WeltradeVWAP/VwapCore.mqh` | Shared VWAP maths (typical price, session anchor, accumulation) |
 | `Sets/*.set` | One preset per entry mode |
+| `web/` | Browser dashboard: multi-symbol signal pad on `lightweight-charts` |
+| `web/bridge/mt5_bridge.py` | MT5 → WebSocket bridge for live prices (Windows-side) |
 | `tools/mql5_check.py` | Static checker for the MQL5 sources |
 | `tools/test_vwap_core.py` | Executes the real `VwapCore.mqh` logic and asserts the VWAP values |
+| `tools/test_mt5_bridge.py` | Executes the real bridge logic against a mock `MetaTrader5` |
+| `tools/mql5_builtin_evidence.txt` | Builtins the corpus misses, with the evidence that confirmed them |
 
 ## Install
 
@@ -153,15 +157,17 @@ different timeframe if you want to compare.
 MetaEditor is Windows-only and does not run in this repository's build
 environment, so **the indicators have not been compiled**. What has been run:
 
-`python3 tools/mql5_check.py --stdlib=<MQL5 Include> --corpus=<MQL5 sources>`
+`python3 tools/mql5_check.py --stdlib=<MQL5 Include> --corpus=<MQL5 sources> --evidence=tools/mql5_builtin_evidence.txt`
 
 - balanced delimiters in all three files
 - `#property indicator_buffers` matches the `SetIndexBuffer` calls, and the
   plot count matches the buffers each plot consumes
 - every call site resolves to a definition with a matching argument count
 - every identifier resolves to a declaration
-- all 81 MQL5 builtins used are confirmed present in a 3,162-file corpus of
-  real MQL5 source
+- of the 83 MQL5 builtins used, 68 are confirmed present in the bundled
+  549-file corpus of real MQL5 source, and the remaining 15 are confirmed by
+  GitHub code search restricted to `*.mqh`, recorded with their hit counts in
+  `tools/mql5_builtin_evidence.txt`
 - every key in every `Sets/*.set` preset is a declared input of the indicator,
   no input is missing, and none is duplicated
 
@@ -170,6 +176,16 @@ dropped `SetIndexBuffer`, a misspelled builtin, an undeclared variable and a
 misspelled `VwapCore` symbol all fail it. The preset check was mutation-tested
 separately — a renamed key, a deleted key, an empty value and a duplicate key
 all fail it.
+
+The evidence file was checked for creating a loophole: with it loaded, a
+deliberately misspelled builtin (`PlotIndexSetIntegar`) still fails the run,
+because it is in neither the corpus nor the evidence file.
+
+The checker previously printed *"83 MQL5 builtins used, all confirmed in the
+reference corpus"* while the section immediately above listed 15 that were not —
+`fatal` counted structural problems and unresolved identifiers but never
+unverified builtins. It now reports `68/83 ... 15 NOT found` and only claims
+"all confirmed" when every one actually is.
 
 `python3 tools/test_vwap_core.py`
 
@@ -186,7 +202,7 @@ all fail it.
   not count, that the signal bar's own range cannot resolve the trade, both
   assumptions for a bar spanning both levels, and the exact-touch boundary in
   all four directions
-- 9 test groups, all passing
+- 9 test groups, 168 assertions, all passing
 
 The outcome tests found a gap in themselves: the first version used only clear
 level breaks, so changing `<=` to `<` went unnoticed. Four boundary assertions
@@ -204,3 +220,69 @@ the TP/SL arrows land on the bars you expect, and that `InpUseTransparency` is
 left off — ARGB alpha on a chart object's `OBJPROP_COLOR` is documented MQL5
 behaviour but appears nowhere in the reference corpus, so the default path uses
 solid fill plus draw order instead.
+
+`python3 tools/test_mt5_bridge.py` (needs `websockets`)
+
+- injects a mock `MetaTrader5` into `sys.modules`, then imports and drives the
+  **shipped** `web/bridge/mt5_bridge.py`
+- 6 groups, 38 assertions: bar flattening, history tailing (newest bars,
+  ascending times, unknown symbol, more bars requested than exist), the tick
+  fallback including `bid`→`last`→`ask` degradation, the timeframe map, the
+  default symbol list, and that every protocol key the bridge emits is one
+  `web/src/feed.js` documents
+
+The bridge itself has **not been run** — there is no Windows host here and no
+`MetaTrader5` wheel installable on Linux. See `web/bridge/README.md`.
+
+`cd web && npm test`
+
+- 20 assertions across the engine, the feed and the box primitive
+- `tests/engine.test.js` ports the assertions from `tools/test_vwap_core.py`, so
+  the browser engine and the MT5 indicator are held to the same expectations
+- `tests/runtime.test.js` drives the simulated feed and runs the box primitive's
+  canvas maths against a recorded mock context, asserting the profit rect is
+  3× the loss rect, that shorts mirror, that off-screen and empty input draw
+  nothing, and that `update()` requests a repaint
+
+Three real defects were found this way, not by reading the code: a duplicate
+timestamp between the last history bar and the forming bar (lightweight-charts
+rejects non-ascending times outright), `requestUpdate` being called on the
+series when it lives on the attached parameter, and a memo dependency list that
+omitted the tick counter, which would have frozen the pad after first paint.
+
+## The dashboard (`web/`)
+
+The MT5 indicator answers one chart at a time. The dashboard exists for what an
+indicator cannot do: many symbols on one screen, and alerts that reach the
+browser.
+
+```
+cd web && npm install && npm run dev
+```
+
+Charts are `lightweight-charts` (Apache-2.0), the one TradingView library that
+is actually forkable — `tradingview/charting_library` is access-gated and
+returns 404 from the GitHub API, so it cannot be redistributed. That library is
+rendering only: it has no built-in indicators, so VWAP, EMA, ATR, the signal
+logic and the position-tool boxes are all in this repository.
+
+| File | What it does |
+| --- | --- |
+| `web/src/engine.js` | VWAP + EMA + ATR + signals + outcome scan, ported from `VwapCore.mqh` |
+| `web/src/feed.js` | `SimulatedFeed` and `Mt5BridgeFeed` behind one interface |
+| `web/src/Chart.jsx` | Candles, VWAP, EMA9, signal arrows, TP/SL hit markers |
+| `web/src/BoxesPrimitive.js` | The green/red risk boxes, as a canvas pane primitive |
+| `web/src/SignalPad.jsx` | One row per instrument: price, VWAP, EMA9, bias, entry, SL, TP, status, hit rate, expectancy |
+| `web/bridge/mt5_bridge.py` | Windows-side bridge for live prices |
+
+**Prices are simulated by default.** The default feed is a seeded random walk
+for wiring the UI up. It is labelled as such in the interface with a standing
+banner, because a pad that looks live but is not is worse than no pad. For real
+prices, run the bridge (see `web/bridge/README.md`) and switch the source.
+
+The signal pad covers six FX majors (EURUSD, GBPUSD, USDJPY, AUDUSD, USDCHF,
+USDCAD), four indices (GER30, US30, SPX500, UK100) and two metals (XAUUSD,
+XAGUSD). Entry mode, VWAP anchor, session hour, ATR stop multiple and reward
+multiple are all changeable live, and the same 1:3 box geometry as the indicator
+follows from the same formula.
+

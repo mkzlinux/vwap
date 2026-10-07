@@ -1,0 +1,33 @@
+# MQL5 builtins used by this repository that do NOT appear in the bundled
+# reference corpus (tools/ default: the EA_SCALPER_XAUUSD tree, 549 files).
+#
+# Absence from a small corpus is weak evidence, not a fault, but "trust me" is
+# worse. Each name below was confirmed real by GitHub code search restricted to
+# *.mqh, i.e. real MQL5 source written by other people.
+#
+# Query:  https://api.github.com/search/code?q=<NAME>+extension:mqh
+# Field:  total_count
+# Date:   2026-10-07
+#
+# Consumed by tools/mql5_check.py --evidence=tools/mql5_builtin_evidence.txt
+#
+# NOTE ColorToARGB is listed here as real MQL5, but the indicator still leaves
+# InpUseTransparency=false by default: the OBJPROP_COLOR + ColorToARGB
+# combination specifically had no support in the bundled corpus, and a default
+# should not rest on a pattern that thin. It is available, not proven safe.
+
+ColorToARGB                203
+INDICATOR_COLOR_INDEX       19
+INIT_PARAMETERS_INCORRECT   77
+PLOT_ARROW                  34
+PLOT_ARROW_SHIFT            14
+PLOT_COLOR_INDEXES           5
+PLOT_EMPTY_VALUE            32
+PLOT_LINE_COLOR             99
+PlaySound                  125
+PlotIndexSetDouble          34
+PlotIndexSetInteger        125
+SendMail                   130
+SendNotification           258
+clrFireBrick                56
+clrSeaGreen                 32

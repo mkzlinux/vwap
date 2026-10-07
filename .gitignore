@@ -1,2 +1,7 @@
 __pycache__/
 *.pyc
+
+# web dashboard build output and dependencies
+web/node_modules/
+web/dist/
+web/.vite/
