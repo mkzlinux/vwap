@@ -196,6 +196,40 @@ test('App.jsx mounts, renders the pad, and drives the chart', async () => {
       stub.calls.fitContent, fitsBefore,
       'changing settings re-renders the chart but must not re-fit the view',
     );
+
+    // --- clicking a pad row switches the chart ---
+    // this is the core interaction and nothing else covers it
+    const rowsBefore = [...container.querySelectorAll('tbody tr')];
+    const ger30 = rowsBefore.find((tr) => tr.textContent.includes('GER30'));
+    assert.ok(ger30, 'GER30 row is clickable');
+
+    const dataBefore = candles.data;
+    const fitsBeforeSwitch = stub.calls.fitContent;
+
+    await act(async () => {
+      ger30.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true }));
+    });
+
+    // the row is marked selected
+    const selRows = [...container.querySelectorAll('tbody tr.sel')];
+    assert.equal(selRows.length, 1, 'exactly one row is marked selected');
+    assert.ok(selRows[0].textContent.includes('GER30'), 'GER30 is the selected row');
+
+    // the chart took a fresh dataset
+    assert.notEqual(candles.data, dataBefore, 'chart received new data for the new symbol');
+    assert.ok(candles.data.length > 100, `new symbol has history, got ${candles.data.length}`);
+
+    // and the view was re-fitted for the new instrument
+    assert.equal(
+      stub.calls.fitContent, fitsBeforeSwitch + 1,
+      'switching symbol re-fits the view once',
+    );
+
+    // the legend tracks the new instrument's precision
+    assert.ok(
+      container.querySelector('.chart-legend').textContent.includes('last'),
+      'legend still renders after the switch',
+    );
   } finally {
     await act(async () => root.unmount());
     assert.equal(stub.calls.removed, 1, 'chart removed on unmount - no leak');
