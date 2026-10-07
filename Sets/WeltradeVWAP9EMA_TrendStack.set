@@ -1,0 +1,41 @@
+; WeltradeVWAP_9EMA_Signals - preset: Price + EMA + VWAP stack
+;
+; Signal: buy only on the first bar where price is above VWAP, price is above
+; the 9 EMA and the EMA is above VWAP (full bullish stack). Sell is the mirror.
+; Fewer signals than the cross, and they arrive after the move has started.
+;
+;   InpAnchor     0=Daily@custom hour  1=Daily@00:00  2=Weekly(Mon)  3=Rolling
+;   InpEntryMode  0=EMA cross VWAP     1=Price+EMA+VWAP stack       2=VWAP pullback
+;   InpEmaPrice   0=Close              1=Typical (O+H+L+C)/4
+
+InpAnchor=0
+InpSessionHour=0
+InpSessionMinute=0
+InpRollingBars=240
+InpUseRealVolume=false
+
+InpEntryMode=1
+InpEmaPeriod=9
+InpEmaPrice=0
+InpTouchTolerancePoints=10
+InpRequireReclaim=true
+
+InpAtrPeriod=14
+InpSlAtrMult=1.5
+InpRewardR=3.0
+InpBoxWidthBars=24
+InpShowRMultiples=true
+InpZonesBehindPrice=true
+
+InpUseTransparency=false
+InpFillAlpha=55
+
+InpAlertPopup=true
+InpAlertSound=false
+InpSoundFile=alert.wav
+InpAlertPush=false
+InpAlertEmail=false
+
+InpMaxSignals=40
+InpShowPanel=true
+InpDeleteOnRemove=true
