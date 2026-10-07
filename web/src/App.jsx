@@ -339,6 +339,7 @@ export default function App() {
             ema={sel.ema}
             signals={sel.signals}
             digits={digitsFor(selected)}
+            symbol={selected}
           />
           <div className="alerts">
             <h2>

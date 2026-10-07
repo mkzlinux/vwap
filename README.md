@@ -236,7 +236,7 @@ The bridge itself has **not been run** — there is no Windows host here and no
 
 `cd web && npm test`
 
-- 22 assertions across the engine, the feed and the box primitive
+- 23 assertions across the engine, the feed, the box primitive and the mount
 - `tests/engine.test.js` ports the assertions from `tools/test_vwap_core.py`, so
   the browser engine and the MT5 indicator are held to the same expectations
 - `tests/runtime.test.js` drives the simulated feed through the same event
@@ -244,19 +244,29 @@ The bridge itself has **not been run** — there is no Windows host here and no
   recorded mock context, asserting the profit rect is 3× the loss rect, that
   shorts mirror, that off-screen and empty input draw nothing, and that
   `update()` requests a repaint
+- `tests/mount.test.js` bundles the real `App.jsx` with esbuild and renders it in
+  jsdom against a recording stub of `lightweight-charts` (jsdom has no canvas).
+  It asserts the tree mounts, that three series and the box primitive are
+  created, that candles arrive with finite values and ascending times, that all
+  twelve instruments appear on the pad with real prices rather than em-dashes,
+  and that the chart is removed on unmount
 
-Four real defects were found this way, not by reading the code: a duplicate
+Five real defects were found this way, not by reading the code: a duplicate
 timestamp between the last history bar and the forming bar (lightweight-charts
 rejects non-ascending times outright), `requestUpdate` being called on the
 series when it lives on the attached parameter, a memo dependency list that
-omitted the tick counter, which would have frozen the pad after first paint, and
+omitted the tick counter, which would have frozen the pad after first paint,
 `SimulatedFeed` never emitting `history`, so the app opened with one candle
-instead of 261.
+instead of 261, and `fitContent()` running on every data push, which reset the
+user's zoom and pan every five seconds.
 
-That last one is worth recording because the first version of the test missed
-it: it asserted against `feed.series()`, which the app never calls. The bar
-store now folds through `applyFeedEvent()` in `feed.js` — the same function the
-component calls — and reverting the seeding fix makes the test fail.
+Two of those are worth recording because the first version of the test missed
+them. The `history` one asserted against `feed.series()`, which the app never
+calls, so the bar store now folds through `applyFeedEvent()` in `feed.js` — the
+same function the component calls. The `fitContent` one waited 60 ms for a data
+push that could not arrive, because `barMs` is 5000; it now forces a re-render
+through the entry-mode control instead. Both were confirmed by reverting the fix
+and watching the test fail.
 
 ## The dashboard (`web/`)
 

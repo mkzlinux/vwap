@@ -10,7 +10,7 @@ import { BoxesPrimitive } from './BoxesPrimitive.js';
  * Markers are the signal arrows; a second marker set records whether each
  * signal hit its stop or its target.
  */
-export default function Chart({ bars, vwap, ema, signals, digits }) {
+export default function Chart({ bars, vwap, ema, signals, digits, symbol }) {
   const container = useRef(null);
   const chartRef = useRef(null);
   const seriesRef = useRef(null);
@@ -18,6 +18,7 @@ export default function Chart({ bars, vwap, ema, signals, digits }) {
   const emaRef = useRef(null);
   const boxesRef = useRef(null);
   const markersRef = useRef(null);
+  const fittedFor = useRef(null); // symbol we last auto-fitted the view for
   const [ready, setReady] = useState(false);
 
   // create once
@@ -157,8 +158,14 @@ export default function Chart({ bars, vwap, ema, signals, digits }) {
     });
     boxesRef.current.update(boxData);
 
-    chartRef.current.timeScale().fitContent();
-  }, [ready, bars, vwap, ema, signals]);
+    // Fit the view when the instrument changes, not on every data push. The
+    // feed ticks every few seconds; re-fitting then would yank the user's zoom
+    // and pan back to full width on each tick.
+    if (fittedFor.current !== symbol) {
+      fittedFor.current = symbol;
+      chartRef.current.timeScale().fitContent();
+    }
+  }, [ready, bars, vwap, ema, signals, symbol]);
 
   const last = bars[bars.length - 1];
 
