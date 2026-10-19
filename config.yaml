@@ -1,0 +1,94 @@
+# ─────────────────────────────────────────────────────────────
+# VWAP + 9EMA + ICT Silver Bullet — signal bot for Weltrade MT5
+# ─────────────────────────────────────────────────────────────
+# Mode is SIGNAL ONLY (no orders are ever sent). The bot prints trade
+# ideas to the console, appends them to signals.log / signals.json /
+# signals.csv and (optionally) pushes them to Telegram.
+# You place the trades manually in the Weltrade MT5 terminal.
+
+mt5:
+  # Leave path empty to attach to the already-running MT5 terminal.
+  # Or set the full path to your Weltrade terminal, e.g.
+  # "C:\\Program Files\\Weltrade MT5\\terminal64.exe"
+  path: ""
+  # Credentials are read from environment (.env) when these are empty.
+  # .env keys: MT5_LOGIN, MT5_PASSWORD, MT5_SERVER, MT5_PATH
+  login: 0
+  password: ""
+  server: ""
+  timeout_ms: 60000
+
+symbols:
+  # Base names — the bot auto-detects Weltrade's suffix
+  # (XAUUSD -> XAUUSDm / XAUUSD.m / XAUUSD_m …).
+  - XAUUSD   # gold
+  - XAGUSD   # silver
+  # ── Weltrade synthetics / extras ─────────────────────────
+  # Add the base name here and the bot will resolve the real
+  # broker symbol automatically. Examples (uncomment as needed):
+  # - XAUEUR
+  # - XAUGBP
+  # - XAGAUD
+  # - BTCUSD
+auto_suffix: true
+
+timeframes:
+  bias: H1     # HTF bias chart
+  entry: M15   # LTF entry chart (Silver Bullet scan)
+
+strategy:
+  mode: signal_only   # DO NOT CHANGE — auto-trading is disabled in this build
+
+  # ── Trend filters ────────────────────────────────────────
+  use_vwap_filter: true
+  use_ema9_filter: true
+  vwap_mode: session      # session (daily reset) | rolling
+  vwap_rolling_period: 50 # only used when vwap_mode: rolling
+  ema_period: 9
+  atr_period: 14
+
+  # ── ICT Silver Bullet model ──────────────────────────────
+  # Sequence: liquidity sweep -> market structure shift (MSS)
+  # -> fair value gap (FVG) forms on the displacement leg
+  # -> signal with entry at the FVG, SL beyond the sweep.
+  swing_left: 5
+  swing_right: 5
+  sweep_lookback: 30          # bars to look back for the swept swing
+  mss_lookback_after_sweep: 5 # MSS must occur within N bars after sweep
+  fvg_lookback: 5             # FVG must be fresh (last N bars)
+  fvg_min_size_atr: 0.10      # ignore dust-sized FVGs (< 0.10 x ATR)
+  displacement_atr_mult: 0.8  # MSS candle range must exceed 0.8 x ATR
+  require_htf_alignment: true # M15 direction must match H1 bias
+  vwap_filter_mode: soft      # strict | soft | off (soft = allow VWAP reclaim on MSS leg)
+  ema_filter_mode: soft       # strict | soft | off
+
+  # ── Killzones (ICT Silver Bullet windows) ────────────────
+  # Times are in MT5 SERVER time (Weltrade server ≈ GMT+2/+3).
+  # CAT (Bulawayo, UTC+2) ≈ server time, ±1h in DST weeks —
+  # check the Market Watch clock in MT5 to confirm.
+  use_killzone: true
+  killzones:
+    - { name: "London Silver Bullet", start: "07:00", end: "10:00" }
+    - { name: "NY AM Silver Bullet",  start: "14:30", end: "16:00" }
+    - { name: "NY PM Silver Bullet",  start: "19:00", end: "20:00" }
+
+  # ── Signal quality gate ──────────────────────────────────
+  min_confluence: 5   # of 7: sweep, mss, fvg, vwap, ema9, htf, killzone
+  cooldown_bars: 3    # ignore repeat same-direction signals within N bars
+
+  # ── Suggested trade levels (for manual placement) ────────
+  sl_buffer_atr: 0.25 # SL sits this far beyond the sweep extreme
+  tp1_r: 2.0          # first target = 2R
+  tp2_r: 3.0          # second target = 3R
+
+history:
+  bias_bars: 400
+  entry_bars: 400
+
+alerts:
+  console: true
+  log_file: signals.log
+  json_file: signals.json
+  csv_file: signals.csv
+  poll_seconds: 30
+  telegram_enabled: false   # set true + fill .env TELEGRAM_* to enable

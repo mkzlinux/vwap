@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Env / secrets (never commit real logins)
+.env
+
+# Runtime outputs
+signals.log
+signals.json
+signals.csv
+trades.csv
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

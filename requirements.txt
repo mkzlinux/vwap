@@ -1,0 +1,12 @@
+# Core deps (Windows + Linux)
+pandas>=1.5
+numpy>=1.23
+pyyaml>=6.0
+python-dotenv>=1.0
+pytz>=2023.3
+requests>=2.28  # only needed for Telegram alerts (optional)
+
+# MetaTrader 5 Python integration (WINDOWS ONLY — install on the PC/VPS
+# running the Weltrade MT5 terminal). Comment this line out on Linux/Mac
+# where you only want to run the self-test / backtest on CSV data.
+MetaTrader5>=5.0.45; sys_platform == 'win32'
