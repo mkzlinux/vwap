@@ -1,0 +1,295 @@
+// @version=5
+// ============================================================================
+//  VWAP + 9EMA + ICT Silver Bullet — Strategy (Backtest) for Weltrade / XAU
+//  Same model as the Indicator, but with strategy.entry / strategy.exit so
+//  you can backtest directly on TradingView (Mirrors backtest.py).
+//
+//  • Put on M15 — H1 bias is fetched via request.security
+//  • Entries only when 7-point confluence + killzone + H1 alignment pass
+//  • SL = beyond sweep ± 0.25×ATR, TP1=2R, TP2=3R, max 1 position
+//  • Use TradingView Strategy Tester to tune minConfluence / strictness
+// ============================================================================
+strategy("VWAP + 9EMA + ICT Silver Bullet — Strategy [Backtest]", shorttitle="VWAP 9EMA SB [Strategy]", overlay=true, initial_capital=10000, commission_type=strategy.commission.percent, commission_value=0.01, pyramiding=0, calc_on_every_tick=false, calc_on_order_fills=false, process_orders_on_close=true, max_lines_count=500, max_boxes_count=500, max_labels_count=500, max_bars_back=600)
+
+// ── Inputs ─────────────────────────────────────────────────────────────────
+grpTrend = "Trend Filters"
+useVwapFilter = input.bool(true, "Use VWAP Filter", group=grpTrend, inline="t1")
+vwapMode      = input.string("session", "VWAP Mode", options=["session","rolling"], group=grpTrend, inline="t1")
+vwapLen       = input.int(50, "Rolling VWAP Length", minval=1, group=grpTrend, inline="t2")
+vwapFilterMode = input.string("soft", "VWAP Strictness", options=["strict","soft","off"], group=grpTrend, inline="t3")
+useEmaFilter  = input.bool(true, "Use 9EMA Filter", group=grpTrend, inline="t4")
+emaLen        = input.int(9, "EMA Length", minval=1, group=grpTrend, inline="t4")
+emaFilterMode = input.string("soft", "EMA Strictness", options=["strict","soft","off"], group=grpTrend, inline="t5")
+atrLen        = input.int(14, "ATR Length", minval=1, group=grpTrend, inline="t6")
+
+grpIct = "ICT Silver Bullet"
+swingLeft     = input.int(5, "Swing Left", minval=1, group=grpIct, inline="i1")
+swingRight    = input.int(5, "Swing Right", minval=1, group=grpIct, inline="i1")
+sweepLookback = input.int(30, "Sweep Lookback", minval=1, group=grpIct, inline="i2")
+mssLookback   = input.int(5, "MSS Lookback After Sweep", minval=1, group=grpIct, inline="i2")
+fvgLookback   = input.int(5, "FVG Lookback", minval=1, group=grpIct, inline="i3")
+fvgMinAtr     = input.float(0.10, "Min FVG Size (×ATR)", step=0.01, group=grpIct, inline="i3")
+dispAtrMult   = input.float(0.8, "MSS Displacement (×ATR)", step=0.1, group=grpIct, inline="i4")
+requireHtf    = input.bool(true, "Require H1 Bias Alignment", group=grpIct, inline="i4")
+minConfluence = input.int(5, "Min Confluence (of 7)", minval=1, maxval=7, group=grpIct, inline="i5")
+slBuffAtr     = input.float(0.25, "SL Buffer (×ATR beyond sweep)", step=0.05, group=grpIct, inline="i6")
+tp1R          = input.float(2.0, "TP1 (R)", step=0.1, group=grpIct, inline="i7")
+tp2R          = input.float(3.0, "TP2 (R)", step=0.1, group=grpIct, inline="i7")
+riskPct       = input.float(1.0, "Risk per Trade %", step=0.1, group=grpIct, inline="i8", tooltip="Position size = risk% of equity / (entry–SL distance). Set 0 for fixed 1-contract.")
+
+grpKz = "Killzones"
+useKillzone   = input.bool(true, "Enforce Killzone", group=grpKz, inline="k0")
+tz            = input.string("UTC+2", "Timezone", options=["UTC","UTC+2","UTC+3","America/New_York","Europe/London","exchange"], group=grpKz, inline="k0")
+kz1Session    = input.session("0700-1000", "London SB", group=grpKz, inline="kz1")
+kz1On         = input.bool(true, "On", group=grpKz, inline="kz1")
+kz2Session    = input.session("1430-1600", "NY AM SB", group=grpKz, inline="kz2")
+kz2On         = input.bool(true, "On", group=grpKz, inline="kz2")
+kz3Session    = input.session("1900-2000", "NY PM SB", group=grpKz, inline="kz3")
+kz3On         = input.bool(true, "On", group=grpKz, inline="kz3")
+
+grpShow = "Display"
+showVwap      = input.bool(true, "Show VWAP", group=grpShow, inline="d1")
+showEma       = input.bool(true, "Show 9EMA", group=grpShow, inline="d1")
+showSwings    = input.bool(true, "Show Swing Points", group=grpShow, inline="d2")
+showFvg       = input.bool(true, "Show FVG Boxes", group=grpShow, inline="d2")
+showKzBg      = input.bool(true, "Shade Killzone Background", group=grpShow, inline="d3")
+
+tfBias = "60"
+
+// ── 1) VWAP / EMA / ATR ────────────────────────────────────────────────────
+ema9 = ta.ema(close, emaLen)
+atr  = ta.atr(atrLen)
+isNewDay = ta.change(time("D"))
+var float cumPV = na
+var float cumV  = na
+pv = hlc3 * volume
+if isNewDay
+    cumPV := pv
+    cumV  := volume
+else
+    cumPV += pv
+    cumV  += volume
+sessionVwap = cumV == 0 ? na : cumPV / cumV
+rollingVwap = ta.sma(hlc3 * volume, vwapLen) / ta.sma(volume, vwapLen)
+vwap = vwapMode == "rolling" ? rollingVwap : sessionVwap
+plot(showVwap ? vwap : na, "VWAP", color=color.new(color.orange, 0), linewidth=2)
+plot(showEma  ? ema9 : na, "9 EMA", color=color.new(color.yellow, 0), linewidth=2)
+
+// ── 2) HTF Bias ────────────────────────────────────────────────────────────
+_htfCalc(_pv, _vol, _close) =>
+    _isNewDay = ta.change(time("D"))
+    var float _cumPV = na
+    var float _cumV  = na
+    if _isNewDay
+        _cumPV := _pv
+        _cumV  := _vol
+    else
+        _cumPV += _pv
+        _cumV  += _vol
+    _sessVwap = _cumV == 0 ? na : _cumPV / _cumV
+    _rollVwap = ta.sma(_close * _vol, vwapLen) / ta.sma(_vol, vwapLen)
+    _vwap = vwapMode == "rolling" ? _rollVwap : _sessVwap
+    _ema  = ta.ema(_close, emaLen)
+    [_vwap, _ema, _close]
+
+[htfVwapRaw, htfEma9Raw, htfCloseRaw] = request.security(syminfo.tickerid, tfBias, _htfCalc(pv, volume, close), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+htfVwap  = htfVwapRaw
+htfEma9  = htfEma9Raw
+htfClose = htfCloseRaw
+htfSwingHighRaw = request.security(syminfo.tickerid, tfBias, ta.pivothigh(high, swingLeft, swingRight), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+htfSwingLowRaw  = request.security(syminfo.tickerid, tfBias, ta.pivotlow(low, swingLeft, swingRight), gaps=barmerge.gaps_off, lookahead=barmerge.lookahead_off)
+var string htfStructDir = na
+if not na(htfSwingHighRaw) and htfCloseRaw > htfSwingHighRaw
+    htfStructDir := "bullish"
+if not na(htfSwingLowRaw) and htfCloseRaw < htfSwingLowRaw
+    htfStructDir := "bearish"
+htfAboveVwap = htfClose > htfVwap
+htfAboveEma  = htfClose > htfEma9
+votesBull = (htfAboveVwap ? 1 : 0) + (htfAboveEma ? 1 : 0) + (htfStructDir == "bullish" ? 1 : 0)
+votesBear = (not htfAboveVwap ? 1 : 0) + (not htfAboveEma ? 1 : 0) + (htfStructDir == "bearish" ? 1 : 0)
+htfBias = votesBull >= 2 ? "bullish" : votesBear >= 2 ? "bearish" : "neutral"
+
+// ── 3) Killzones ───────────────────────────────────────────────────────────
+inSession(sess, _tz) => not na(time(timeframe.period, sess, _tz))
+inKillzone = (kz1On and inSession(kz1Session, tz)) or (kz2On and inSession(kz2Session, tz)) or (kz3On and inSession(kz3Session, tz))
+bgcolor(showKzBg and inKillzone ? color.new(color.purple, 85) : na)
+
+// ── 4) Swings ──────────────────────────────────────────────────────────────
+pivotHigh = ta.pivothigh(high, swingLeft, swingRight)
+pivotLow  = ta.pivotlow(low,  swingLeft, swingRight)
+plotshape(showSwings and not na(pivotHigh), "Swing High", shape.triangledown, location.abovebar, color.new(color.red, 0), size=size.tiny, offset=-swingRight)
+plotshape(showSwings and not na(pivotLow),  "Swing Low",  shape.triangleup,   location.belowbar, color.new(color.lime, 0), size=size.tiny, offset=-swingRight)
+var float lastSwingHighPrice = na
+var int   lastSwingHighBar   = na
+var float lastSwingLowPrice  = na
+var int   lastSwingLowBar    = na
+if not na(pivotHigh)
+    lastSwingHighPrice := pivotHigh
+    lastSwingHighBar   := bar_index - swingRight
+if not na(pivotLow)
+    lastSwingLowPrice := pivotLow
+    lastSwingLowBar   := bar_index - swingRight
+
+// ── 5) Sweep → MSS → FVG ──────────────────────────────────────────────────
+sweepBullCond = not na(lastSwingLowPrice) and (bar_index - lastSwingLowBar) <= sweepLookback and low < lastSwingLowPrice and close > lastSwingLowPrice
+sweepBearCond = not na(lastSwingHighPrice) and (bar_index - lastSwingHighBar) <= sweepLookback and high > lastSwingHighPrice and close < lastSwingHighPrice
+
+var string pendingDir = na
+var float  pendingSweptLevel = na
+var float  pendingSweepExtreme = na
+var int    pendingSweepBar = na
+if sweepBullCond
+    pendingDir := "bullish"
+    pendingSweptLevel := lastSwingLowPrice
+    pendingSweepExtreme := low
+    pendingSweepBar := bar_index
+if sweepBearCond
+    pendingDir := "bearish"
+    pendingSweptLevel := lastSwingHighPrice
+    pendingSweepExtreme := high
+    pendingSweepBar := bar_index
+
+barsSinceSweep = na(pendingSweepBar) ? 9999 : bar_index - pendingSweepBar
+if barsSinceSweep > mssLookback + fvgLookback + 1
+    pendingDir := na
+    pendingSweptLevel := na
+    pendingSweepExtreme := na
+    pendingSweepBar := na
+
+isDisplacement = (high - low) >= dispAtrMult * atr
+mssBull = pendingDir == "bullish" and barsSinceSweep > 0 and barsSinceSweep <= mssLookback and not na(lastSwingHighPrice) and close > lastSwingHighPrice and isDisplacement
+mssBear = pendingDir == "bearish" and barsSinceSweep > 0 and barsSinceSweep <= mssLookback and not na(lastSwingLowPrice)  and close < lastSwingLowPrice  and isDisplacement
+
+var float mssLevel = na
+var int   mssBar   = na
+var string lastMssDir = na
+if mssBull
+    mssLevel := lastSwingHighPrice
+    mssBar   := bar_index
+    lastMssDir := "bullish"
+    pendingDir := na
+if mssBear
+    mssLevel := lastSwingLowPrice
+    mssBar   := bar_index
+    lastMssDir := "bearish"
+    pendingDir := na
+
+fvgBull = low > high[2] and (low - high[2]) >= fvgMinAtr * atr
+fvgBear = high < low[2]  and (low[2] - high) >= fvgMinAtr * atr
+var float fvgTop = na
+var float fvgBot = na
+var float fvgMid = na
+var int   fvgBar = na
+var string fvgDir = na
+barsSinceMss = na(mssBar) ? 9999 : bar_index - mssBar
+inFvgWindow = not na(mssBar) and barsSinceMss >= -1 and barsSinceMss <= fvgLookback
+bullFvgCandidate = fvgBull and inFvgWindow and lastMssDir == "bullish"
+bearFvgCandidate = fvgBear and inFvgWindow and lastMssDir == "bearish"
+if bullFvgCandidate
+    fvgTop := low
+    fvgBot := high[2]
+    fvgMid := (fvgTop + fvgBot) / 2
+    fvgBar := bar_index
+    fvgDir := "bullish"
+if bearFvgCandidate
+    fvgTop := low[2]
+    fvgBot := high
+    fvgMid := (fvgTop + fvgBot) / 2
+    fvgBar := bar_index
+    fvgDir := "bearish"
+if fvgDir == "bullish" and close < fvgBot
+    fvgTop := na, fvgBot := na, fvgMid := na, fvgBar := na, fvgDir := na, lastMssDir := na, mssBar := na, mssLevel := na
+if fvgDir == "bearish" and close > fvgTop
+    fvgTop := na, fvgBot := na, fvgMid := na, fvgBar := na, fvgDir := na, lastMssDir := na, mssBar := na, mssLevel := na
+barsSinceFvg = na(fvgBar) ? 9999 : bar_index - fvgBar
+if barsSinceFvg > fvgLookback + mssLookback + 1
+    fvgTop := na, fvgBot := na, fvgMid := na, fvgBar := na, fvgDir := na, lastMssDir := na
+
+// VWAP/EMA leg filter
+f_sideOk(_dir, _lineVal, _close, _mode, _crossed) =>
+    _rightSide = _dir == "bullish" ? _close > _lineVal : _close < _lineVal
+    _mode == "off" ? true : _rightSide ? true : _mode == "soft" and _crossed
+var bool crossedVwapOnLeg = false
+var bool crossedEmaOnLeg  = false
+inLegWindow = not na(mssBar) and not na(fvgBar) and bar_index >= mssBar and bar_index <= fvgBar + 1
+if inLegWindow
+    if fvgDir == "bullish"
+        if close > vwap
+            crossedVwapOnLeg := true
+        if close > ema9
+            crossedEmaOnLeg := true
+    if fvgDir == "bearish"
+        if close < vwap
+            crossedVwapOnLeg := true
+        if close < ema9
+            crossedEmaOnLeg := true
+else if na(fvgBar)
+    crossedVwapOnLeg := false
+    crossedEmaOnLeg  := false
+vwapOkBull = f_sideOk("bullish", vwap, close, vwapFilterMode, crossedVwapOnLeg)
+vwapOkBear = f_sideOk("bearish", vwap, close, vwapFilterMode, crossedVwapOnLeg)
+emaOkBull  = f_sideOk("bullish", ema9, close, emaFilterMode, crossedEmaOnLeg)
+emaOkBear  = f_sideOk("bearish", ema9, close, emaFilterMode, crossedEmaOnLeg)
+vwapOk = fvgDir == "bullish" ? vwapOkBull : fvgDir == "bearish" ? vwapOkBear : false
+emaOk  = fvgDir == "bullish" ? emaOkBull  : fvgDir == "bearish" ? emaOkBear  : false
+
+// Confluence
+var float lastSweptLevel = na
+var float lastSweepExtremeVar = na
+if not na(pendingSweptLevel)
+    lastSweptLevel := pendingSweptLevel
+    lastSweepExtremeVar := pendingSweepExtreme
+sweepOk = not na(fvgDir)
+mssOk   = not na(fvgDir)
+fvgOk   = not na(fvgDir)
+htfOk   = htfBias == fvgDir
+kzOk    = inKillzone
+confluenceScore = (sweepOk ? 1 : 0) + (mssOk ? 1 : 0) + (fvgOk ? 1 : 0) + (vwapOk ? 1 : 0) + (emaOk ? 1 : 0) + (htfOk ? 1 : 0) + (kzOk ? 1 : 0)
+hardPass = vwapOk and emaOk and (not requireHtf or htfOk) and (not useKillzone or kzOk) and confluenceScore >= minConfluence
+isNewSetup = not na(fvgDir) and fvgBar == bar_index and hardPass
+cooldownBars = 3
+var int lastSignalBar = na
+var string lastSignalDir = na
+cooldownOk = na(lastSignalBar) or bar_index - lastSignalBar >= cooldownBars or lastSignalDir != fvgDir
+buySignal  = isNewSetup and fvgDir == "bullish" and cooldownOk
+sellSignal = isNewSetup and fvgDir == "bearish" and cooldownOk
+if buySignal or sellSignal
+    lastSignalBar := bar_index
+    lastSignalDir := fvgDir
+
+// Levels
+entryPrice = fvgMid
+slPriceBull = lastSweepExtremeVar - slBuffAtr * atr
+slPriceBear = lastSweepExtremeVar + slBuffAtr * atr
+slPrice = fvgDir == "bullish" ? slPriceBull : slPriceBear
+riskDist  = fvgDir == "bullish" ? entryPrice - slPrice : slPrice - entryPrice
+tp1Price = fvgDir == "bullish" ? entryPrice + tp1R * riskDist : fvgDir == "bearish" ? entryPrice - tp1R * riskDist : na
+tp2Price = fvgDir == "bullish" ? entryPrice + tp2R * riskDist : fvgDir == "bearish" ? entryPrice - tp2R * riskDist : na
+validRisk = riskDist > 0
+buySignalFinal  = buySignal  and validRisk
+sellSignalFinal = sellSignal and validRisk
+
+// ── Plotting ───────────────────────────────────────────────────────────────
+var box fvgBox = na
+if showFvg and not na(fvgDir) and fvgBar == bar_index
+    if not na(fvgBox)
+        box.delete(fvgBox)
+    colBox = fvgDir == "bullish" ? color.new(color.lime, 75) : color.new(color.red, 75)
+    colBorder = fvgDir == "bullish" ? color.new(color.lime, 0) : color.new(color.red, 0)
+    fvgBox := box.new(bar_index - 1, fvgTop, bar_index + 8, fvgBot, bgcolor=colBox, border_color=colBorder)
+
+plot(buySignalFinal or sellSignalFinal ? entryPrice : na, "Entry (FVG 50%)", color.new(color.white, 20), 2, plot.style_linebr)
+plot(buySignalFinal or sellSignalFinal ? slPrice : na, "SL", color.new(color.red, 0), 1, plot.style_linebr)
+plot(buySignalFinal or sellSignalFinal ? tp1Price : na, "TP1", color.new(color.lime, 20), 1, plot.style_linebr)
+plot(buySignalFinal or sellSignalFinal ? tp2Price : na, "TP2", color.new(color.yellow, 20), 1, plot.style_linebr)
+plotshape(buySignalFinal,  "BUY",  shape.labelup,   location.belowbar, color.new(color.lime, 0), size=size.normal, text="BUY",  textcolor=color.black)
+plotshape(sellSignalFinal, "SELL", shape.labeldown, location.abovebar, color.new(color.red, 0),  size=size.normal, text="SELL", textcolor=color.white)
+
+// ── Strategy orders ───────────────────────────────────────────────────────
+qty = riskPct <= 0 ? 1 : (strategy.equity * riskPct / 100) / math.max(riskDist, syminfo.mintick)
+if buySignalFinal
+    strategy.entry("Long SB", strategy.long, qty=qty, limit=entryPrice)
+    strategy.exit("Long TP/SL", from_entry="Long SB", stop=slPrice, limit=tp1Price)  // TP1; extend to TP2 by splitting qty if desired
+if sellSignalFinal
+    strategy.entry("Short SB", strategy.short, qty=qty, limit=entryPrice)
+    strategy.exit("Short TP/SL", from_entry="Short SB", stop=slPrice, limit=tp1Price)
