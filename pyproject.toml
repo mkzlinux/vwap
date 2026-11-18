@@ -1,0 +1,13 @@
+[project]
+name = "vwapbot"
+version = "0.1.0"
+description = "Quant research, backtest and paper-trading bot for Polymarket"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "pytest-cov>=5"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
