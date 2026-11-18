@@ -13,6 +13,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -112,6 +113,15 @@ def fetch_history(token: str, fidelity: int) -> list[list[float]]:
     return [[int(pt["t"]), float(pt["p"])] for pt in data.get("history", [])]
 
 
+def _history_or_none(rec: dict, fidelity: int) -> Optional[list]:
+    try:
+        history = fetch_history(rec["yes_token"], fidelity)
+    except (urllib.error.URLError, TimeoutError, ValueError) as exc:
+        log.warning("history failed for %s: %s", rec["id"], exc)
+        return None
+    return history if len(history) >= 2 else None
+
+
 def collect(
     category: str,
     tag_slug: str,
@@ -119,27 +129,35 @@ def collect(
     max_markets: int,
     fidelity: int,
     max_events: int = 1000,
+    event_stride: int = 1,
+    workers: int = 6,
 ) -> int:
-    """Append resolved markets with history to a JSONL file; returns count saved."""
+    """Append resolved markets with history to a JSONL file; returns count saved.
+
+    `event_stride` keeps every k-th event so a fixed market budget spans more
+    calendar days. Histories for one event's markets are fetched concurrently.
+    """
+    if event_stride < 1 or workers < 1:
+        raise ValueError("event_stride and workers must be >= 1")
     out_path.parent.mkdir(parents=True, exist_ok=True)
     seen: set[str] = set()
     if out_path.exists():
         seen = {json.loads(line)["id"] for line in out_path.read_text().splitlines() if line}
     saved = 0
-    with out_path.open("a") as fh:
-        for event in iter_closed_events(tag_slug, max_events):
+    with out_path.open("a") as fh, ThreadPoolExecutor(max_workers=workers) as pool:
+        for i, event in enumerate(iter_closed_events(tag_slug, max_events)):
+            if i % event_stride:
+                continue
+            recs, ids = [], set()
             for raw in event.get("markets", []):
                 rec = parse_market(raw, category)
-                if rec is None or rec["id"] in seen:
+                if rec is not None and rec["id"] not in seen and rec["id"] not in ids:
+                    recs.append(rec)
+                    ids.add(rec["id"])
+            for rec, history in zip(recs, pool.map(lambda r: _history_or_none(r, fidelity), recs)):
+                if history is None:
                     continue
-                try:
-                    rec["history"] = fetch_history(rec["yes_token"], fidelity)
-                except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-                    log.warning("history failed for %s: %s", rec["id"], exc)
-                    continue
-                if len(rec["history"]) < 2:
-                    continue
-                fh.write(json.dumps(rec) + "\n")
+                fh.write(json.dumps({**rec, "history": history}) + "\n")
                 seen.add(rec["id"])
                 saved += 1
                 if saved >= max_markets:

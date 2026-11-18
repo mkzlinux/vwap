@@ -29,15 +29,25 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--weather", type=int, default=600, help="max weather markets")
     parser.add_argument("--crypto", type=int, default=400, help="max crypto up/down markets")
+    parser.add_argument("--weather-stride", type=int, default=1, help="keep every k-th weather event")
+    parser.add_argument("--crypto-stride", type=int, default=1, help="keep every k-th crypto event")
+    parser.add_argument("--max-events", type=int, default=1000, help="events to scan per category")
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
     log = logging.getLogger("fetch_data")
 
-    for key, limit in (("weather", args.weather), ("crypto", args.crypto)):
+    plan = (
+        ("weather", args.weather, args.weather_stride),
+        ("crypto", args.crypto, args.crypto_stride),
+    )
+    for key, limit, stride in plan:
         category, tag, out, fidelity = SOURCES[key]
         if limit <= 0:
             continue
-        saved = collect(category, tag, out, max_markets=limit, fidelity=fidelity)
+        saved = collect(
+            category, tag, out, max_markets=limit, fidelity=fidelity,
+            max_events=args.max_events, event_stride=stride,
+        )
         log.info("%s: saved %d new markets -> %s", category, saved, out)
     return 0
 

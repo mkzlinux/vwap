@@ -108,3 +108,31 @@ def test_iter_closed_events_paginates_in_small_pages_and_stops(monkeypatch):
     got = list(fetch.iter_closed_events("daily-temperature", max_events=100))
     assert len(got) == 40
     assert calls == [0, 20, 40]
+
+
+def test_collect_event_stride_samples_every_kth_event(tmp_path, monkeypatch):
+    from vwapbot import fetch
+
+    events = [{"markets": [raw_market(id=str(i))]} for i in range(10)]
+    monkeypatch.setattr(fetch, "iter_closed_events", lambda tag, n: iter(events))
+    monkeypatch.setattr(fetch, "fetch_history", lambda token, fidelity: [[1, 0.5], [2, 0.6]])
+
+    out = tmp_path / "s.jsonl"
+    saved = fetch.collect("weather", "t", out, max_markets=100, fidelity=60, event_stride=3)
+    ids = [json.loads(line)["id"] for line in out.read_text().splitlines()]
+    assert saved == 4
+    assert ids == ["0", "3", "6", "9"]
+
+
+def test_collect_fetches_histories_concurrently_but_keeps_order(tmp_path, monkeypatch):
+    from vwapbot import fetch
+
+    event = {"markets": [raw_market(id=str(i), clobTokenIds=json.dumps([f"t{i}", "x"])) for i in range(6)]}
+    monkeypatch.setattr(fetch, "iter_closed_events", lambda tag, n: iter([event]))
+    monkeypatch.setattr(fetch, "fetch_history", lambda token, fidelity: [[1, 0.5], [2, float(token[1:]) / 10]])
+
+    out = tmp_path / "c.jsonl"
+    fetch.collect("weather", "t", out, max_markets=100, fidelity=60, workers=4)
+    rows = [json.loads(line) for line in out.read_text().splitlines()]
+    assert [r["id"] for r in rows] == [str(i) for i in range(6)]
+    assert [r["history"][1][1] for r in rows] == [i / 10 for i in range(6)]

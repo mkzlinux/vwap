@@ -37,7 +37,8 @@ MIN, HOUR = 60, 3600
 # category -> (file, horizons in seconds, taker fee rate on stake)
 CONFIG = {
     "weather": (DATA / "weather.jsonl", [24 * HOUR, 12 * HOUR, 6 * HOUR, 1 * HOUR], 0.0),
-    "crypto": (DATA / "crypto.jsonl", [3 * MIN, 2 * MIN, 1 * MIN], 0.02),
+    # CLOB history for these markets is ~10 min apart, so sub-5m horizons just re-read stale points
+    "crypto": (DATA / "crypto.jsonl", [10 * MIN, 5 * MIN], 0.02),
 }
 PRICE_BAND = (0.03, 0.97)  # ignore near-certain prices: no real liquidity to fill
 SLIPPAGE = 0.01
@@ -57,6 +58,16 @@ def entry_pairs(markets: list[Market], horizon: int) -> list[tuple[float, int]]:
     return out
 
 
+def median_staleness(markets: list[Market], horizon: int) -> int:
+    """Median seconds between the entry price's timestamp and the intended entry time."""
+    lags = sorted(
+        (m.end_ts - horizon) - max(t for t, _ in m.history if t <= m.end_ts - horizon)
+        for m in markets
+        if any(t <= m.end_ts - horizon for t, _ in m.history)
+    )
+    return lags[len(lags) // 2] if lags else -1
+
+
 def purge(train: list[Market], test: list[Market], horizon: int) -> list[Market]:
     """Drop test markets entered before the last training market resolved."""
     cutoff = max(m.end_ts for m in train)
@@ -64,7 +75,8 @@ def purge(train: list[Market], test: list[Market], horizon: int) -> list[Market]
 
 
 def report(category: str, markets: list[Market], horizons: list[int], fee: float, args) -> None:
-    print(f"\n=== {category.upper()}  ({len(markets)} resolved markets) ===")
+    days = len({m.end_ts // 86400 for m in markets})
+    print(f"\n=== {category.upper()}  ({len(markets)} resolved markets over {days} calendar days) ===")
     if len(markets) < 2 * MIN_TEST_MARKETS:
         print("  not enough data yet")
         return
@@ -72,7 +84,9 @@ def report(category: str, markets: list[Market], horizons: list[int], fee: float
     for h in horizons:
         test = purge(train, test_all, h)
         tr, te = entry_pairs(train, h), entry_pairs(test, h)
-        print(f"\n-- horizon {label(h)}: train {len(tr)} / test {len(te)} markets")
+        stale = median_staleness(test, h)
+        print(f"\n-- horizon {label(h)}: train {len(tr)} / test {len(te)} markets"
+              f" (median price age {stale // MIN}m)")
         if len(tr) < MIN_TEST_MARKETS or len(te) < MIN_TEST_MARKETS:
             print("  too few markets at this horizon")
             continue
