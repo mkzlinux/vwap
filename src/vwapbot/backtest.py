@@ -108,8 +108,14 @@ def run_backtest(
     min_edge: float = 0.0,
     fee_rate: float = 0.0,
     slippage: float = 0.0,
+    flat_stakes: bool = False,
 ) -> BacktestResult:
-    """Simulate the strategy; `fee_rate` is charged on stake, `slippage` on entry price."""
+    """Simulate the strategy; `fee_rate` is charged on stake, `slippage` on entry price.
+
+    `flat_stakes=True` sizes every bet off the initial bankroll (no compounding).
+    Use it when many markets resolve together, where sequential compounding
+    would wildly overstate returns.
+    """
     cash = bankroll
     peak = bankroll
     max_dd = 0.0
@@ -131,7 +137,7 @@ def run_backtest(
             continue
 
         stake = position_size(
-            cash,
+            bankroll if flat_stakes else cash,
             p_side,
             entry,
             kelly_multiplier=kelly_multiplier,

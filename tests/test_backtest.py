@@ -131,3 +131,13 @@ def test_load_markets_reads_jsonl_and_skips_blank_lines(tmp_path):
     path.write_text(json.dumps(rec) + "\n\n")
     (m,) = load_markets(path)
     assert m == Market("1", "weather", 500, True, ((100, 0.2), (200, 0.3)))
+
+
+def test_flat_stakes_do_not_compound():
+    ms = [make_market(str(i), end=(100 + i) * HOUR, yes_won=True, price=0.5) for i in range(3)]
+    kwargs = dict(bankroll=1000, horizon_secs=2 * HOUR, kelly_multiplier=1.0, max_fraction=0.5)
+    flat = run_backtest(ms, lambda mk, px: 0.6, flat_stakes=True, **kwargs)
+    comp = run_backtest(ms, lambda mk, px: 0.6, **kwargs)
+    assert [t.stake for t in flat.trades] == pytest.approx([200.0, 200.0, 200.0])
+    assert flat.pnl == pytest.approx(600.0)
+    assert comp.pnl > flat.pnl

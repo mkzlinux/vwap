@@ -16,6 +16,7 @@ Usage: python scripts/run_backtest.py [--train 0.6] [--bankroll 1000]
 from __future__ import annotations
 
 import argparse
+import random
 import sys
 from pathlib import Path
 
@@ -41,7 +42,7 @@ CONFIG = {
     "crypto": (DATA / "crypto.jsonl", [10 * MIN, 5 * MIN], 0.02),
 }
 PRICE_BAND = (0.03, 0.97)  # ignore near-certain prices: no real liquidity to fill
-SLIPPAGE = 0.01
+SLIPPAGES = (0.01, 0.03, 0.05)  # thin books: real spreads are unknown, so sweep them
 MIN_TEST_MARKETS = 30
 
 
@@ -56,6 +57,28 @@ def entry_pairs(markets: list[Market], horizon: int) -> list[tuple[float, int]]:
         if px is not None and 0.0 < px < 1.0:
             out.append((px, int(m.yes_won)))
     return out
+
+
+def cluster_bootstrap(trades, end_of: dict[str, int], n_boot: int = 2000, seed: int = 7):
+    """Mean return-on-stake with a 95% CI from resampling whole calendar days.
+
+    Markets that resolve the same day share weather/price regimes, so days (not
+    individual trades) are the independent units.
+    """
+    by_day: dict[int, list[float]] = {}
+    for t in trades:
+        by_day.setdefault(end_of[t.market_id] // 86400, []).append(t.pnl / t.stake)
+    days = list(by_day.values())
+    if len(days) < 3:
+        return 0.0, float("-inf"), float("inf")
+
+    def mean_of(sample) -> float:
+        flat = [r for d in sample for r in d]
+        return sum(flat) / len(flat)
+
+    rng = random.Random(seed)
+    boots = sorted(mean_of([rng.choice(days) for _ in days]) for _ in range(n_boot))
+    return mean_of(days), boots[int(0.025 * n_boot)], boots[int(0.975 * n_boot)]
 
 
 def median_staleness(markets: list[Market], horizon: int) -> int:
@@ -103,14 +126,21 @@ def report(category: str, markets: list[Market], horizons: list[int], fee: float
         def strategy(m: Market, px: float):
             return cal(px) if PRICE_BAND[0] <= px <= PRICE_BAND[1] else None
 
-        for min_edge in (0.03, 0.06):
+        end_of = {m.id: m.end_ts for m in test}
+        for slip in SLIPPAGES:
             res = run_backtest(
                 test, strategy, bankroll=args.bankroll, horizon_secs=h,
-                kelly_multiplier=0.25, max_fraction=0.05, min_edge=min_edge,
-                fee_rate=fee, slippage=SLIPPAGE,
+                kelly_multiplier=0.25, max_fraction=0.01, min_edge=0.05,
+                fee_rate=fee, slippage=slip, flat_stakes=True,
             )
-            print(f"  min_edge {min_edge:.2f}: trades={len(res.trades):4d} win={res.win_rate:5.1%}"
-                  f" pnl=${res.pnl:9.2f} roi={res.roi:7.1%} maxDD={res.max_drawdown:5.1%}")
+            mean, lo, hi = cluster_bootstrap(res.trades, end_of)
+            head = (f"  slip {slip:.0%}: trades={len(res.trades):4d} win={res.win_rate:5.1%}"
+                    f" flat-stake pnl=${res.pnl:8.2f}")
+            if lo == float("-inf"):
+                print(f"{head}  -> too few calendar days for a confidence interval (need >= 3)")
+                continue
+            verdict = "edge survives" if lo > 0 else "NOT distinguishable from zero/loss"
+            print(f"{head}  return/stake {mean:+6.1%} [95% CI {lo:+6.1%}, {hi:+6.1%}] -> {verdict}")
 
 
 def main() -> int:
@@ -125,8 +155,9 @@ def main() -> int:
             print(f"\n=== {category.upper()}: {path.name} missing, run scripts/fetch_data.py ===")
             continue
         report(category, load_markets(path), horizons, fee, args)
-    print(f"\nCosts: slippage {SLIPPAGE:.0%} on entry, crypto fee {CONFIG['crypto'][2]:.0%} of stake,"
-          f" price band {PRICE_BAND}. Past results are not a forecast.")
+    print(f"\nFlat stakes (1% of bankroll, no compounding), min edge 5%, crypto fee"
+          f" {CONFIG['crypto'][2]:.0%} of stake, price band {PRICE_BAND}."
+          " History has no bid/ask, so treat all results as optimistic. Past results are not a forecast.")
     return 0
 
 
